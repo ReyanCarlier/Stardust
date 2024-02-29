@@ -9,7 +9,7 @@ An additionnal database made with SQLite is also used by Stardust to store devic
 An empty database is also provided and distributed here.
 
 ## Warnings
-- 
+- Make sure you are the owner of the network where you use Stardust or to have the explicit autorization of the owner to scan the network you're on.
 - Stardust is functional but some implementations of Microsoft Defender were removed due to license reasons.
 - `Atlassian.Jira.dll` library included in this project is a slightly modified version of [Atlassian.Net-SDK](https://github.com/kalhorim/Atlassian.Net-SDK) and keep its own license. (See `Dependencies/Atlassian.Jira.dll.LICENSE.md`)
 
