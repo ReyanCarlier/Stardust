@@ -1,0 +1,88 @@
+﻿@using Stardust.Database.Data;
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Edit" Class="mr-3 mb-n1" />
+            Edit Task @task.Id
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudTextField @bind-Value="task.Title" Label="Title" ReadOnly="false" />
+        <MudSelect @bind-Value="task.Status" T="TodoTaskStatus" Label="Status">
+            @foreach (TodoTaskStatus status in Enum.GetValues(typeof(TodoTaskStatus)))
+            {
+                <MudSelectItem Value="@status">@status</MudSelectItem>
+            }
+        </MudSelect>
+        <MudSelect @bind-Value="task.Emergency" T="TodoTaskEmergency" Label="Emergency Level">
+            @foreach (TodoTaskEmergency emergency in Enum.GetValues(typeof(TodoTaskEmergency)))
+            {
+                <MudSelectItem Value="@emergency">@emergency</MudSelectItem>
+            }
+        </MudSelect>
+        <MudSelect @bind-Value="task.AssignedToName" T="string" Label="Assigned To">
+            @foreach (StardustUser user in stardustUsers)
+            {
+                <MudSelectItem Value="@user.Name">@user.Name</MudSelectItem>
+            }
+        </MudSelect>
+        <MudTextField @bind-Value="task.Title" Label="Title" ReadOnly="false"/>
+        <MudTextField Lines="10" @bind-Value="task.Description" Label="Description" ReadOnly="false" />
+        <MudDatePicker Placeholder="Insert due date" Label="Due Date" @bind-Date="task.DueDate"/>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Error" OnClick="(() => EditTask())">Edit</MudButton>
+    </DialogActions>
+</MudDialog>
+@code {
+    [CascadingParameter] MudDialogInstance? MudDialog { get; set; }
+
+    [Parameter] public TaskTodo task { get; set; } = new TaskTodo();
+
+    public TaskTodo taskCopy;
+    public List<StardustUser> stardustUsers = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        taskCopy = new(task);
+        stardustUsers = await StardustCRUD.GetUsersAsync();
+        return;
+    }
+    private void Cancel()
+    {
+        MudDialog?.Cancel();
+        task = taskCopy ?? new();
+    }
+
+    private async Task EditTask()
+    {
+        if (taskCopy?.Status == TodoTaskStatus.Deleted || taskCopy?.Status == TodoTaskStatus.Completed)
+        {
+            Snackbar.Add("Can't edit a deleted or completed task.", Severity.Warning);
+            task = taskCopy ?? new();
+            MudDialog?.Close(DialogResult.Cancel());
+            return;
+        }
+        if (task.DueDate < DateTime.Today.AddDays(1) && task.Status != TodoTaskStatus.Deleted && task.Status != TodoTaskStatus.Completed)
+        {
+            Snackbar.Add("Due date can't be in the past.", Severity.Warning);
+            task = taskCopy ?? new();
+            MudDialog?.Close(DialogResult.Cancel());
+            return;
+        }
+        bool edited = await StardustCRUD.UpdateTaskTodoAsync(task);
+        if (edited)
+        {
+            Snackbar.Add("Task Edited !", Severity.Success);
+            MudDialog?.Close(DialogResult.Ok(task?.Id));
+        }
+        else
+        {
+            Snackbar.Add("Couldn't edit Task.", Severity.Error);
+            task = taskCopy ?? new();
+            MudDialog?.Close(DialogResult.Cancel());
+        }
+    }
+}

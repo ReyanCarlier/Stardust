@@ -1,0 +1,258 @@
+﻿@page "/"
+@using System;
+@using System.Diagnostics;
+@using Stardust.Database.Context;
+@using Stardust.Database.Data;
+@using Stardust.Memory;
+@using Stardust.Nmap.Class;
+@using System.Xml;
+@using Stardust.Nmap;
+@implements IDisposable
+
+<MudContainer Class="mt-8 px-8 mb-6" MaxWidth="MaxWidth.False">
+    <MudGrid>
+        <MudItem xs="12" sm="12" md="4">
+            <MudPaper Elevation="4" Class="d-flex flex-row pt-6 pb-4 align-content-center" Style="height: 10vh;">
+                <MudIcon Icon="@Icons.Material.Filled.ScreenSearchDesktop" Color="Color.Primary" Class="mx-4" Style="width:5vh; height:5vh;"></MudIcon>
+                <div>
+                    <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mb-n1">Connected Devices on Local Network</MudText>
+                    <MudText Typo="Typo.h5">@DetectedDevices.Count()</MudText>
+                </div>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="4">
+            <MudPaper Elevation="4" Class="d-flex flex-row pt-6 pb-4" Style="height: 10vh;">
+                <MudIcon Icon="@Icons.Material.Filled.NetworkWifi" Color="Color.Primary" Class="mx-4" Style="width:5vh; height:5vh;"></MudIcon>
+                <div>
+                    <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mb-n1">Local Network</MudText>
+                    <MudText Typo="Typo.h5">@LocalIP</MudText>
+                </div>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="4">
+            <MudPaper Elevation="4" Class="d-flex flex-row pt-6 pb-4" Style="height: 10vh;">
+                @if (Stardust.Program.GlobalScanPending)
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.Radar" Color="Color.Success" Class="mx-4" Style="width:5vh; height:5vh;"></MudIcon>
+                    <div>
+                        <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mb-n1">Global Scanner Status</MudText>
+                        <MudText Typo="Typo.h5">Active</MudText>
+                    </div>
+                }
+                else
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.AppsOutage" Color="Color.Secondary" Class="mx-4" Style="width:5vh; height:5vh;"></MudIcon>
+                    <div>
+                        <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mb-n1">Global Scanner Status</MudText>
+                        <MudText Typo="Typo.h5">Inactive</MudText>
+                    </div>
+                }
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" Class="justify-content-center mt-4">
+            <MudGrid>
+                <MudItem xs="6">
+                    <MudPaper Elevation="4" Class="d-flex flex-row pt-6 pb-4 align-content-center" Style="height: 12vh;">
+                        <MudIcon Icon="@Icons.Material.Filled.WifiTetheringError" Color="Color.Secondary" Class="mx-4" Style="width:5vh; height:5vh;"></MudIcon>
+                        <div>
+                            <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mb-n1">Critical Emergency</MudText>
+                            <MudText Typo="Typo.h5">@TaskTodosCritical?.Count</MudText>
+                        </div>
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="6">
+                    <MudPaper Elevation="4" Class="d-flex flex-row pt-6 pb-4 align-content-center" Style="height: 12vh;">
+                        <MudIcon Icon="@Icons.Material.Filled.NearbyError" Color="Color.Secondary" Class="mx-4" Style="width:5vh; height:5vh;"></MudIcon>
+                        <div>
+                            <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mb-n1">High Emergency</MudText>
+                            <MudText Typo="Typo.h5">@TaskTodosHigh?.Count</MudText>
+                        </div>
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="6">
+                    <MudPaper Elevation="4" Class="d-flex flex-row pt-6 pb-4 align-content-center" Style="height: 12vh;">
+                        <MudIcon Icon="@Icons.Material.Filled.Error" Color="Color.Warning" Class="mx-4" Style="width:5vh; height:5vh;"></MudIcon>
+                        <div>
+                            <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mb-n1">Medium Emergency</MudText>
+                            <MudText Typo="Typo.h5">@TaskTodosMedium?.Count</MudText>
+                        </div>
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="6">
+                    <MudPaper Elevation="4" Class="d-flex flex-row pt-6 pb-4 align-content-center" Style="height: 12vh;">
+                        <MudIcon Icon="@Icons.Material.Filled.ErrorOutline" Color="Color.Primary" Class="mx-4" Style="width:5vh; height:5vh;"></MudIcon>
+                        <div>
+                            <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mb-n1">Low Emergency</MudText>
+                            <MudText Typo="Typo.h5">@TaskTodosLow?.Count</MudText>
+                        </div>
+                    </MudPaper>
+                </MudItem>
+            </MudGrid>
+        </MudItem>
+        <MudItem xs="12" sm="6" Class="justify-content-center mt-4">
+            <MudPaper Elevation="4" Class="pa-4" Style="height: 26vh"></MudPaper>
+        </MudItem>
+
+        <MudSpacer/>
+        <MudItem xs="12" sm="6" md="4" Class="justify-content-center mt-4">
+            <MudPaper Elevation="4" Class="pa-4 justify-content-center" Style="height: 35vh;">
+                <MudText>RAM Consumption</MudText>
+                <MudChart title="RAM Consumption" ChartType="ChartType.Donut" Width="25vh" Height="25vh" LegendPosition="Position.Bottom" InputData="@RamData" InputLabels="@RamLabels">
+                </MudChart>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="4" Class="justify-content-center mt-4">
+            <MudPaper Elevation="4" Class="pa-4 justify-content-center" Style="height: 35vh;">
+                <MudText>CPU Consumption</MudText>
+                <MudChart title="CPU Consumption" ChartType="ChartType.Donut" Width="25vh" Height="25vh" LegendPosition="Position.Bottom" InputData="@CPUData" InputLabels="@CPULabels">
+                </MudChart>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="12" md="4" Class="justify-content-center mt-4">
+            <MudPaper Elevation="4" Class="pa-4" Style="height: 35vh;"></MudPaper>
+        </MudItem>
+    </MudGrid>
+</MudContainer>
+
+@code {
+
+    // CPU & RAM
+    private CancellationTokenSource _cts = new CancellationTokenSource();
+    public MemoryMetricsClient memoryMetricsClient { get; set; } = new MemoryMetricsClient();
+    public MemoryMetrics memoryMetrics { get; set; } = new MemoryMetrics();
+    public float CPUsage { get; set; } = 0;
+    public Dictionary<string, float> processorData = new Dictionary<string, float>();
+    public Dictionary<string, double> cpuData = new Dictionary<string, double>();
+    public double[] RamData = new double[2];
+    public string[] RamLabels = new string[2] { "Used RAM", "Free RAM" };
+    public double[] CPUData = new double[2];
+    public string[] CPULabels = new string[2] { "Used CPU", "Free CPU" };
+    public List<TaskTodo>? taskTodos { get; set; }
+    public List<TaskTodo>? TaskTodosCritical { get; set; }
+    public List<TaskTodo>? TaskTodosHigh { get; set; }
+    public List<TaskTodo>? TaskTodosMedium { get; set; }
+    public List<TaskTodo>? TaskTodosLow { get; set; }
+
+
+    // NETWORK
+    public List<DetectedDevice> DetectedDevices { get; set; } = new List<DetectedDevice>();
+    public XmlDocument? ScanReport { get; set; } = null;
+    public DevicesService devicesService = new DevicesService();
+    public string LocalIP = "";
+
+    public async Task MonitorSystem(CancellationToken cancellationToken)
+    {
+        memoryMetricsClient = new MemoryMetricsClient();
+
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            float CPUsage = CPUInfo.GetCPUDetails();
+            CPUData[0] = CPUsage;
+            CPUData[1] = 100 - CPUsage;
+
+            memoryMetrics = memoryMetricsClient.GetMetrics();
+            RamData[0] = memoryMetrics.Used;
+            RamData[1] = memoryMetrics.Free;
+
+            StateHasChanged();
+            await Task.Delay(1000);
+        }
+    }
+
+    public void ParseScan()
+    {
+        if (ScanReport == null)
+            return;
+        if (DetectedDevices != null)
+            DetectedDevices.Clear();
+        else
+            DetectedDevices = new();
+        XmlNodeList HostsNodeList = ScanReport.GetElementsByTagName("host");
+
+        foreach (XmlNode hostNode in HostsNodeList)
+        {
+            var ipNode = hostNode.SelectSingleNode("address");
+            var macNode = ipNode?.NextSibling;
+            var hostnameNode = hostNode.SelectSingleNode("hostnames/hostname")?.Attributes?["name"];
+
+            var detectedDevice = new DetectedDevice
+            {
+                LocalIP = ipNode?.Attributes?["addr"]?.Value,
+                MACAddress = macNode?.Attributes?["addr"]?.Value,
+                Vendor = macNode?.Attributes?["vendor"]?.Value,
+                Hostname = hostnameNode?.Value ?? "N/A"
+            };
+
+            if (detectedDevice.Hostname != "host.docker.internal")
+                DetectedDevices.Add(detectedDevice);
+        }
+    }
+
+    public async Task MonitorNetwork(CancellationToken cancellationToken)
+    {
+        List<string> text = new();
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                string rawIp = DevicesService.GetLocalIP();
+                LocalIP = "";
+                string[] splitted = rawIp.Split(".");
+                for (int i = 0; i < splitted.Length - 1; i++)
+                {
+                    LocalIP += splitted[i] + ".";
+                }
+                LocalIP += "0";
+                ScanReport = null;
+                text.Clear();
+                await devicesService.RunNmapScanLocalNetworkAsync();
+                text = devicesService.GetResultLines();
+
+                ScanReport = new();
+                ScanReport.LoadXml(string.Join(string.Empty, text));
+                ParseScan();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+                devicesService.GetErrorLines().ForEach(Console.WriteLine);
+                ScanReport = null;
+                StateHasChanged();
+            }
+            finally
+            {
+                StateHasChanged();
+            }
+            await Task.Delay(5000);
+        }
+    }
+
+    protected async override Task OnInitializedAsync()
+    {
+        _ = MonitorSystem(_cts.Token);
+        taskTodos = await StardustCRUD.GetAllTasksTodoAsync();
+        if (taskTodos != null)
+        {
+            TaskTodosCritical = taskTodos.Where(x => x.Emergency == TodoTaskEmergency.Critical).ToList();
+            TaskTodosHigh = taskTodos.Where(x => x.Emergency == TodoTaskEmergency.High).ToList();
+            TaskTodosMedium = taskTodos.Where(x => x.Emergency == TodoTaskEmergency.Medium).ToList();
+            TaskTodosLow = taskTodos.Where(x => x.Emergency == TodoTaskEmergency.Low).ToList();
+        }
+        else
+        {
+            TaskTodosCritical = new List<TaskTodo>();
+            TaskTodosHigh = new List<TaskTodo>();
+            TaskTodosMedium = new List<TaskTodo>();
+            TaskTodosLow = new List<TaskTodo>();
+        }
+        _ = Task.Run(() => MonitorSystem(_cts.Token));
+        _ = Task.Run(() => MonitorNetwork(_cts.Token));
+        return;
+    }
+
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+    }
+}

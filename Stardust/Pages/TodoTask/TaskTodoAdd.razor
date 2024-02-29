@@ -1,0 +1,80 @@
+﻿@using Stardust.Database.Data;
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Edit" Class="mr-3 mb-n1" />
+            Add Task @task.Id
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudTextField Label="DeviceId" @bind-Value="task.DeviceId" ReadOnly="true" />
+        <MudTextField @bind-Value="task.Title" Label="Title" ReadOnly="false" />
+        <MudSelect @bind-Value="task.Status" T="TodoTaskStatus" Label="Status">
+            @foreach (TodoTaskStatus status in Enum.GetValues(typeof(TodoTaskStatus)))
+            {
+                <MudSelectItem Value="@status">@status</MudSelectItem>
+            }
+        </MudSelect>
+        <MudSelect @bind-Value="task.Emergency" T="TodoTaskEmergency" Label="Emergency Level">
+            @foreach (TodoTaskEmergency emergency in Enum.GetValues(typeof(TodoTaskEmergency)))
+            {
+                <MudSelectItem Value="@emergency">@emergency</MudSelectItem>
+            }
+        </MudSelect>
+        <MudSelect @bind-Value="task.AssignedToName" T="string" Label="Assigned To">
+            @foreach (StardustUser user in stardustUsers)
+            {
+                <MudSelectItem Value="@user.Name">@user.Name</MudSelectItem>
+            }
+        </MudSelect>
+        <MudTextField Lines="10" @bind-Value="task.Description" Label="Description" ReadOnly="false" />
+        <MudDatePicker Placeholder="Insert due date" Label="Due Date" @bind-Date="task.DueDate" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Success" OnClick="(() => AddTask())">Add</MudButton>
+    </DialogActions>
+</MudDialog>
+@code {
+    [CascadingParameter] MudDialogInstance? MudDialog { get; set; }
+
+    [Parameter] public TaskTodo task { get; set; } = new TaskTodo();
+
+    public TaskTodo? taskCopy;
+    public List<StardustUser> stardustUsers = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        taskCopy = task;
+        stardustUsers = await StardustCRUD.GetUsersAsync();
+        return;
+    }
+    private void Cancel()
+    {
+        MudDialog?.Cancel();
+        task = taskCopy ?? new();
+    }
+
+    private async Task AddTask()
+    {
+        if (task.DueDate < DateTime.Today.AddDays(1))
+        {
+            Snackbar.Add("Due date can't be in the past.", Severity.Warning);
+            task = taskCopy ?? new();
+            MudDialog?.Close(DialogResult.Ok(task?.Id));
+            return;
+        }
+        task.CreatedDate = DateTime.Now;
+        task.AssignedToId = stardustUsers.Find(x => x.Name == task.AssignedToName)?.Id ?? -1;
+        bool added = await StardustCRUD.AddTaskTodoAsync(task);
+        if (added)
+            Snackbar.Add("Task Added !", Severity.Success);
+        else
+        {
+            Snackbar.Add("Couldn't add Task.", Severity.Error);
+            task = taskCopy ?? new();
+        }
+        MudDialog?.Close(DialogResult.Ok(task?.Id));
+    }
+}

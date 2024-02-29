@@ -1,0 +1,134 @@
+﻿@page "/todotask/add"
+
+@using Stardust.Database.Data
+@using Stardust.Database.CRUD
+
+<AuthorizeView>
+    <MudContainer Class="mt-5 px-8" MaxWidth="MaxWidth.False">
+        <MudItem>
+            <MudText Typo="Typo.h5">Add Task</MudText>
+        </MudItem>
+        <MudItem xs="12" sm="12" class="mt-3" Style="height:78vh;">
+            <EditForm Context="AddNewTaskContext" Model="@newTask" OnValidSubmit="addNewTask">
+                <DataAnnotationsValidator />
+                <MudCard Elevation="4">
+                    <MudCardContent>
+                        <MudTextField T="string" Label="Title" @bind-Value="newTask.Title" For="@(() => newTask.Title)" />
+                        <MudSelect @bind-Value="newTask.Emergency" T="TodoTaskEmergency" Label="Emergency Level">
+                            @foreach (TodoTaskEmergency emergency in Enum.GetValues(typeof(TodoTaskEmergency)))
+                            {
+                                <MudSelectItem Value="@emergency">@emergency</MudSelectItem>
+                            }
+                        </MudSelect>
+                        <MudSelect @bind-Value="_nameAssigned" T="string" Label="Assigned To">
+                            @foreach (StardustUser user in stardustUsers)
+                            {
+                                <MudSelectItem Value="@user.Name">@user.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                        <MudTextField T="string" Label="Description" Lines="6" @bind-Value="newTask.Description" For="@(() => newTask.Description)" />
+                        <MudDatePicker Placeholder="Insert due date" Label="Due Date" @bind-Date="dueDate" For="@(() => newTask.DueDate)" />
+                    </MudCardContent>
+                    <MudCardActions Class="align-content-center justify-content-center">
+                        <MudButton StartIcon="@Icons.Material.Filled.AddModerator" Disabled="@_processing" ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" Class="m1-auto">
+                            @if (_processing)
+                            {
+                                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                                <MudText Class="ms-2">Adding...</MudText>
+                            }
+                            else
+                            {
+                                <MudText>Add</MudText>
+                            }
+                        </MudButton>
+                    </MudCardActions>
+                </MudCard>
+            </EditForm>
+        </MudItem>
+    </MudContainer>
+</AuthorizeView>
+
+@code {
+
+    public List<TaskTodo>? tasks = new();
+    public TaskTodo newTask = new();
+    public bool _processing = false;
+    public string _message = "";
+    public string _nameAssigned = "";
+    public DateTime? dueDate = DateTime.Today.AddDays(1);
+    public List<StardustUser> stardustUsers = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        stardustUsers = await StardustCRUD.GetUsersAsync();
+        return;
+    }
+
+    public async Task addNewTask()
+    {
+        tasks = await StardustCRUD.GetAllTasksTodoAsync();
+        if (tasks == null)
+        {
+            var parameters = new DialogParameters<Components.Dialog>();
+            parameters.Add("Message", "Couldn't recover Tasks list.");
+            parameters.Add("Color", Color.Secondary);
+            var dialog = DialogService.Show<Components.Dialog>("Error", parameters);
+            return;
+        }
+
+        if (newTask.Title == null || newTask.Description == null || newTask?.Emergency == null)
+        {
+            var parameters = new DialogParameters<Components.Dialog>();
+            parameters.Add("Message", "Please make sure to fill in every labels to add a TodoTask.");
+            parameters.Add("Color", Color.Secondary);
+            var dialog = DialogService.Show<Components.Dialog>("Error", parameters);
+            return;
+        }
+        DateTime tomorrow = DateTime.Today.AddDays(1);
+        if (dueDate < tomorrow)
+        {
+            var parameters = new DialogParameters<Components.Dialog>();
+            parameters.Add("Message", "Due date must be minimum tomorrow.");
+            parameters.Add("Color", Color.Secondary);
+            var dialog = DialogService.Show<Components.Dialog>("Error", parameters);
+            return;
+        }
+        _processing = true;
+
+        newTask.Id = tasks.Count + 1;
+        newTask.Status = TodoTaskStatus.NotStarted;
+        newTask.CreatedDate = DateTime.Now;
+        newTask.LastUpdatedDate = newTask.CreatedDate;
+        StardustUser? stardustUser = await StardustCRUD.GetUserByNameAsync(_nameAssigned);
+        newTask.AssignedToName = _nameAssigned;
+        newTask.AssignedToId = stardustUser != null ? (int)stardustUser.Id : -1;
+        newTask.DeviceId = -1;
+        newTask.UserId = "0";
+        newTask.ReportId = -1;
+        newTask.DueDate = dueDate;
+
+        if (await StardustCRUD.AddTaskTodoAsync(newTask) == false)
+        {
+            var parameters = new DialogParameters<Components.Dialog>();
+            parameters.Add("Message", "An error occured while adding the Task to database.");
+            parameters.Add("Color", Color.Error);
+            var dialog = DialogService.Show<Components.Dialog>("Error", parameters);
+            _processing = false;
+            return;
+        }
+        else
+        {
+            var parameters = new DialogParameters<Components.Dialog>();
+            parameters.Add("Message", "The Task has been added to database.");
+            parameters.Add("OkText", "Ok");
+            parameters.Add("Color", Color.Success);
+            var dialog = DialogService.Show<Components.Dialog>("Success", parameters);
+        }
+        tasks = await StardustCRUD.GetAllTasksTodoAsync();
+        _processing = false;
+        newTask = new();
+        dueDate = DateTime.Today.AddDays(1);
+        _nameAssigned = "";
+        StateHasChanged();
+    }
+}

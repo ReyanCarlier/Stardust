@@ -1,0 +1,225 @@
+﻿@page "/user/{UserId}"
+@using Microsoft.Graph.Beta;
+@using Stardust.Database.Data;
+@using Microsoft.Graph.Beta.Models;
+@using Newtonsoft.Json;
+@using Stardust.GraphWrapper;
+@using Stardust.Nmap.Class;
+@using Stardust.Nmap;
+@using System.Xml;
+
+<AuthorizeView>
+    <MudContainer Class="mt-4 px-8 mb-10" MaxWidth="MaxWidth.False">
+        <MudGrid Justify="Justify.Center">
+            <MudItem>
+                <MudCard Elevation="4">
+                    <MudCardMedia Height="200" Image="@Avatar"></MudCardMedia>
+                    <MudCardContent>
+                        <MudText Typo="Typo.h5">@User?.DisplayName</MudText>
+                        <MudText Typo="Typo.body2">@User?.JobTitle</MudText>
+                        <MudText Typo="Typo.body2">@User?.Mail</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        </MudGrid>
+        <MudGrid>
+            <MudItem xs="12" md="12" lg="12" sm="12">
+                <MudTabs Elevation="4" Outlined="true" Position="Position.Left" Rounded="true" Border="true" ApplyEffectsToContainer="true" Class="mt-8" PanelClass="pa-6">
+                    <MudTabPanel Text="Devices">
+                        <MudGrid>
+                            <MudItem xs="12" md="12" lg="12" sm="12">
+                                <MudTable Context="managedDevice" Items="@ManagedDevices" Hover="true" Outlined="true" Dense="true" Bordered="true" FixedHeader="true" Height="30vh">
+                                    <HeaderContent>
+                                        <MudTh>Name</MudTh>
+                                        <MudTh>MacAddress</MudTh>
+                                        <MudTh>Local IP</MudTh>
+                                        <MudTh>Action</MudTh>
+                                    </HeaderContent>
+                                    <RowTemplate>
+                                        <MudTd DataLabel="Name">@managedDevice?.DeviceName</MudTd>
+                                        <MudTd DataLabel="MacAddress">@managedDevice?.WiFiMacAddress</MudTd>
+                                        <MudTd DataLabel="Local IP">@managedDevice?.AdditionalData["LocalIP"]</MudTd>
+                                        <MudTd DataLabel="Action">
+                                            @if (managedDevice?.AdditionalData["LocalIP"] != null && (string?)(managedDevice?.AdditionalData["LocalIP"]) != "")
+                                            {
+                                                <MudIconButton Icon="@Icons.Material.Filled.WifiFind" Color="Color.Primary" OnClick="@(()=>GoScan(@managedDevice?.AdditionalData["LocalIP"]?.ToString()))"></MudIconButton>
+                                            }
+                                        </MudTd>
+                                    </RowTemplate>
+                                </MudTable>
+                            </MudItem>
+                        </MudGrid>
+                    </MudTabPanel>
+                    <MudTabPanel Text="Todo">
+                        <MudGrid>
+                            <MudItem xs="12" md="12" lg="12" sm="12">
+                                <MudTable Context="linkedTask" Items="@UserLinkedTasks" Hover="true" Outlined="true" Dense="true" Bordered="true" FixedHeader="true" Height="30vh">
+                                    <HeaderContent>
+                                        <MudTh>Status</MudTh>
+                                        <MudTh>Device</MudTh>
+                                        <MudTh>Emergency</MudTh>
+                                        <MudTh>Description</MudTh>
+                                    </HeaderContent>
+                                    <RowTemplate>
+                                        <MudTd DataLabel="Name">@linkedTask.Status</MudTd>
+                                        <MudTd DataLabel="Device">@linkedTask.DeviceId</MudTd>
+                                        <MudTd DataLabel="Emergency">@linkedTask.Emergency</MudTd>
+                                        <MudTd DataLabel="Title">@linkedTask.Title</MudTd>
+                                    </RowTemplate>
+                                </MudTable>
+                            </MudItem>
+                        </MudGrid>
+                    </MudTabPanel>
+                    <MudTabPanel Text="Reports">
+                        <MudGrid>
+                            <MudItem xs="12" md="12" lg="12" sm="12">
+                                <MudTable Context="userReport" Items="@UserLinkedReports" Hover="true" Outlined="true" Dense="true" Bordered="true" FixedHeader="true" Height="30vh">
+                                    <HeaderContent>
+                                        <MudTh>Date</MudTh>
+                                        <MudTh>Device</MudTh>
+                                        <MudTh>DeviceId</MudTh>
+                                        <MudTh>Open Ports</MudTh>
+                                    </HeaderContent>
+                                    <RowTemplate>
+                                        <MudTd DataLabel="Name">@userReport.CreatedAt</MudTd>
+                                        <MudTd DataLabel="Device">@StardustCRUD.GetMachineByIdAsync(userReport.MachineId)?.Result?.Hostname</MudTd>
+                                        <MudTd DataLabel="DeviceId">@userReport.MachineId</MudTd>
+                                        <MudTd DataLabel="WFMA">@userReport.OpenPorts</MudTd>
+                                    </RowTemplate>
+                                </MudTable>
+                            </MudItem>
+                        </MudGrid>
+                    </MudTabPanel>
+                </MudTabs>
+            </MudItem>
+        </MudGrid>
+    </MudContainer>
+</AuthorizeView>
+
+@code {
+    [Parameter]
+    public string UserId { get; set; } = "";
+
+    XmlDocument? ScanReport { get; set; } = null;
+    List<ManagedDevice?> ManagedDevices = new();
+    List<DetectedDevice> DetectedDevices = new();
+    public List<TaskTodo>? UserLinkedTasks = new();
+    DevicesService devicesService = new();
+    public List<Stardust.Database.Data.Report>? UserLinkedReports = new();
+    public string Avatar { get; set; } = "";
+    public Microsoft.Graph.Beta.Models.User? User = new();
+
+    public async void GoScan(string? target)
+    {
+        if (target == null)
+            return;
+        await JSRuntime.InvokeVoidAsync("open", $"/device/{target.Replace(".", "-")}", "_blank");
+    }
+
+    public void ParseScan()
+    {
+        if (ScanReport == null)
+            return;
+        if (DetectedDevices != null)
+            DetectedDevices.Clear();
+        else
+            DetectedDevices = new();
+        XmlNodeList HostsNodeList = ScanReport.GetElementsByTagName("host");
+
+        foreach (XmlNode hostNode in HostsNodeList)
+        {
+            var ipNode = hostNode.SelectSingleNode("address");
+            var macNode = ipNode?.NextSibling;
+            var hostnameNode = hostNode.SelectSingleNode("hostnames/hostname")?.Attributes?["name"];
+
+            var detectedDevice = new DetectedDevice
+            {
+                LocalIP = ipNode?.Attributes?["addr"]?.Value,
+                MACAddress = macNode?.Attributes?["addr"]?.Value,
+                Vendor = macNode?.Attributes?["vendor"]?.Value,
+                Hostname = hostnameNode?.Value ?? "N/A"
+            };
+            if (detectedDevice.MACAddress == null)
+                continue;
+            if (detectedDevice.Hostname != "host.docker.internal")
+                DetectedDevices.Add(detectedDevice);
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                var photo = await GraphClient.Users[$"{{{UserId}}}"].Photo.Content.GetAsync();
+
+                if (photo != null)
+                {
+                    using (var memoryStream = new MemoryStream())
+                    {
+                        await photo.CopyToAsync(memoryStream);
+                        byte[] photoContent = memoryStream.ToArray();
+                        Avatar = $"data:image/png;base64,{Convert.ToBase64String(photoContent)}";
+                    }
+                }
+            }
+            catch
+            {
+                Avatar = $"data:image/png;base64";
+            }
+            User = await GraphClient.Users[$"{{{UserId}}}"].GetAsync();
+            StateHasChanged();
+            GraphWrapper graphWrapper = new(GraphClient);
+            ManagedDevices = await graphWrapper.GetGraphManagedDevicesByUserId(UserId);
+            StateHasChanged();
+
+            List<TaskTodo>? allTasks = await StardustCRUD.GetAllTasksTodoAsync();
+
+            if (allTasks != null)
+            {
+                foreach (TaskTodo task in allTasks)
+                {
+                    if (task.UserId == UserId)
+                        UserLinkedTasks?.Add(task);
+                }
+            }
+
+            StateHasChanged();
+
+            UserLinkedReports = await StardustCRUD.GetReportsByUserIdAsync(UserId);
+            StateHasChanged();
+            List<string> text = new();
+            await devicesService.RunNmapScanLocalNetworkAsync();
+            text = devicesService.GetResultLines();
+            ScanReport = new();
+            ScanReport.LoadXml(string.Join(string.Empty, text));
+            ParseScan();
+
+            foreach (ManagedDevice? managedDevice in ManagedDevices)
+            {
+                if (managedDevice == null || (managedDevice.WiFiMacAddress == null && managedDevice.EthernetMacAddress == null))
+                    continue;
+                managedDevice.WiFiMacAddress = managedDevice.WiFiMacAddress?.ToUpper();
+                managedDevice.EthernetMacAddress = managedDevice.EthernetMacAddress?.ToUpper();
+                managedDevice.AdditionalData["LocalIP"] = "";
+
+                foreach (DetectedDevice detectedDevice in DetectedDevices)
+                {
+                    if (detectedDevice.MACAddress == managedDevice.WiFiMacAddress)
+                    {
+                        managedDevice.AdditionalData["LocalIP"] = detectedDevice.LocalIP;
+                        break;
+                    }
+                    else if (detectedDevice.MACAddress == managedDevice.EthernetMacAddress)
+                    {
+                        managedDevice.AdditionalData["LocalIP"] = detectedDevice.LocalIP;
+                        break;
+                    }
+                }
+            }
+            StateHasChanged();
+        }
+    }
+
+}

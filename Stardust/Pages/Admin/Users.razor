@@ -1,0 +1,143 @@
+﻿@page "/admin/users"
+
+@using Stardust.Database.Data;
+
+<AuthorizeView>
+    @if (stardustUser.Role == StardustUserRole.SuperAdmin)
+    {
+        <MudContainer Class="mt-5 px-8" MaxWidth="MaxWidth.False">
+            <MudItem>
+                <MudText Typo="Typo.h5">Stardust Users</MudText>
+            </MudItem>
+            <MudItem xs="12" md="12" lg="12" Class="mt-3" Style="overflow-x:scroll; overscroll-behavior-x:contain">
+                <MudTable Context="stardustUserContext" Breakpoint="Breakpoint.Sm" Items="@stardustUsers" Hover="true" Outlined="true" Dense="true" Bordered="true" FixedHeader="true" Height="74vh">
+                    <HeaderContent>
+                        <MudTh>Name</MudTh>
+                        <MudTh>Email</MudTh>
+                        <MudTh>Role</MudTh>
+                        <MudTh>Action</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Name">@stardustUserContext.Name</MudTd>
+                        <MudTd DataLabel="Type">@stardustUserContext.Email</MudTd>
+                        <MudTd DataLabel="Default">@stardustUserContext.Role</MudTd>
+                        <MudTd>
+                            @* @if (stardustUserContext.Role != StardustUserRole.SuperAdmin)
+                            { *@
+                                @if (stardustUser.Role <= StardustUserRole.SuperAdmin)
+                                {
+                                    <MudButton Color="Color.Error" OnClick="(() => DeleteUser(stardustUserContext))">Delete</MudButton>
+                                    <MudButton Color="Color.Warning" OnClick="(() => EditUser(stardustUserContext))">Edit</MudButton>
+                                }
+                            @* } *@
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            </MudItem>
+            @if (stardustUser.Role == StardustUserRole.SuperAdmin)
+            {
+                <MudGrid Justify="Justify.Center">
+                    <MudItem>
+                        <MudButton Color="Color.Success" OnClick="(() => AddUser())">Add User</MudButton>
+                    </MudItem>
+                </MudGrid>
+            }
+        </MudContainer>
+    }
+</AuthorizeView>
+
+@code {
+    public StardustUser stardustUser { get; set; } = new StardustUser();
+    List<StardustUser> stardustUsers { get; set; }
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    private async Task AddUser()
+    {
+        var parameters = new DialogParameters<StardustUserAdd> {
+            { x => x.targetStardustUser, new StardustUser() },
+            { x => x.currentStardustUser, stardustUser }
+        };
+        var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<StardustUserAdd>("Add User", parameters, options);
+        var result = await dialog.Result;
+        if (!result.Canceled)
+        {
+            stardustUsers = await StardustCRUD.GetUsersAsync();
+            StateHasChanged();
+        }
+    }
+
+    private async Task DeleteUser(StardustUser? user)
+    {
+        if (user == null)
+            return;
+        var parameters = new DialogParameters<StardustUserDelete> {
+            { x => x.targetStardustUser, user },
+            { x => x.currentStardustUser, stardustUser },
+            { x => x.message, $"Do you want to delete {user.Name} ?" }
+        };
+        var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<StardustUserDelete>("Delete User", parameters, options);
+        var result = await dialog.Result;
+        if (!result.Canceled)
+        {
+            await StardustCRUD.DeleteUserAsync(user);
+            stardustUsers = await StardustCRUD.GetUsersAsync();
+            StateHasChanged();
+        }
+    }
+
+    public async Task EditUser(StardustUser? user)
+    {
+        if (user == null)
+            return;
+        var parameters = new DialogParameters<StardustUserEdit> {
+            { x => x.targetStardustUser, user },
+            { x => x.currentStardustUser, stardustUser }
+        };
+        var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<StardustUserEdit>("Edit User", parameters, options);
+
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            stardustUsers = await StardustCRUD.GetUsersAsync();
+            StateHasChanged();
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthenticationStateTask == null)
+            return;
+        var authState = await AuthenticationStateTask;
+
+        if (authState?.User?.Identity?.IsAuthenticated != null && authState.User.Identity.IsAuthenticated)
+        {
+            try
+            {
+                var user = await GraphClient.Me.GetAsync();
+                if (user == null)
+                    return;
+                stardustUsers = await StardustCRUD.GetUsersAsync();
+                foreach (StardustUser stardustUserItem in stardustUsers)
+                {
+                    if (stardustUserItem?.Name?.ToLower() == user?.DisplayName?.ToLower())
+                    {
+                        stardustUser = stardustUserItem;
+                        StateHasChanged();
+                        return;
+                    }
+                }
+            }
+            catch
+            {
+                return;
+            }
+        }
+    }
+
+}

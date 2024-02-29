@@ -1,0 +1,120 @@
+﻿@page "/settings"
+@using Microsoft.Graph.Beta.Models;
+@using Stardust.Database.Data;
+@using System.Net;
+@using Stardust.Wrapper;
+
+<AuthorizeView>
+    <MudContainer Class="mt-4 px-8 mb-10" MaxWidth="MaxWidth.False">
+        @* Display User Avatar *@
+        <MudItem>
+            <MudAvatar>
+                <MudImage Src="@userAvatar"/>
+            </MudAvatar>
+            <MudText Typo="Typo.h5">Account Manager</MudText>
+        </MudItem>
+        @* Allow User to modify his Jira Token and Jira Email *@
+        @if (stardustUser != null)
+        {
+            <MudItem xs="12" sm="6" md="4" Class="justify-content-center mt-4">
+                
+
+                
+                <MudPaper Elevation="4" Class="pa-4 justify-content-center">
+                    <MudGrid Justify="Justify.Center">
+                        <MudItem xs="12" sm="12" md="12">
+                            <MudTextField @bind-Value="@stardustUser.JiraMail" Label="Jira Email" Placeholder="Jira Mail" Class="mr-3" ReadOnly="false"/>
+                        </MudItem>
+                        <MudItem xs="12" sm="12" md="12">
+                            <MudTextField @bind-Value="@stardustUser.JiraToken" Label="Jira Token" Placeholder="Jira Token" Class="mr-3" />
+                        </MudItem>
+                        <MudItem>
+                            <MudIconButton Icon="@Icons.Material.Filled.Save" Size="Size.Medium" Color="Color.Success" Class="mt-3" OnClick="(() => UpdateUser())"/>
+                        </MudItem>
+                    </MudGrid>
+                </MudPaper>
+            </MudItem>
+        }
+    </MudContainer>
+</AuthorizeView>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+    User? graphUser;
+    StardustUser? stardustUser;
+    string? userAvatar;
+
+    private async Task UpdateUser()
+    {
+        var parameters = new DialogParameters<Components.Dialog>();
+        IDialogReference? dialog;
+
+        // Try to connect to Jira with the new settings
+        JiraClient jiraClient = new JiraClient("https://quanteam.atlassian.net", stardustUser?.JiraMail, stardustUser?.JiraToken);
+        bool _connected = await jiraClient.IsConnectedAsync();
+        if (!_connected)
+        {
+            parameters = new DialogParameters<Components.Dialog>();
+            parameters.Add("Message", "Couldn't connect to Jira with the new settings.");
+            parameters.Add("Color", Color.Error);
+            dialog = DialogService.Show<Components.Dialog>("Error", parameters);
+            return;
+        }
+
+        bool result = await StardustCRUD.UpdateUserAsync(stardustUser);
+        if (!result)
+        {
+            parameters.Add("Message", "Couldn't update your settings.");
+            parameters.Add("Color", Color.Error);
+            dialog = DialogService.Show<Components.Dialog>("Error", parameters);
+            return;
+        }
+        parameters.Add("Message", "New Jira settings updated successfully.");
+        parameters.Add("Color", Color.Success);
+        dialog = DialogService.Show<Components.Dialog>("Edit", parameters);
+        return;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthenticationStateTask == null)
+            return;
+        var authState = await AuthenticationStateTask;
+
+        if (authState?.User?.Identity?.IsAuthenticated != null && authState.User.Identity.IsAuthenticated)
+        {
+            try
+            {
+                graphUser = await GraphClient.Users[authState.User.Identity.Name].GetAsync();
+                var photoStream = await GraphClient.Users[authState.User.Identity.Name].Photo.Content.GetAsync();
+                if (photoStream != null)
+                {
+                    using (var memoryStream = new MemoryStream())
+                    {
+                        await photoStream.CopyToAsync(memoryStream);
+                        byte[] photoContent = memoryStream.ToArray();
+                        userAvatar = $"data:image/png;base64,{Convert.ToBase64String(photoContent)}";
+                    }
+                }
+                var stardustUsers = await StardustCRUD.GetUsersAsync();
+
+                foreach (StardustUser stardustUserItem in stardustUsers)
+                {
+                    if (stardustUserItem.GraphUserId == graphUser?.Id)
+                    {
+                        stardustUser = stardustUserItem;
+                        break;
+                    }
+                }
+            }
+            catch (Microsoft.Graph.ServiceException ex)
+            {
+                if (ex.ResponseStatusCode == Convert.ToInt32(HttpStatusCode.Unauthorized))
+                {
+                    await JSRuntime.InvokeVoidAsync("open", "/logout", "_self");
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,194 @@
+﻿@page "/devices/local"
+@using System.Diagnostics;
+@using Microsoft.Graph.Beta;
+@using Microsoft.Graph.Beta.Models;
+@using Newtonsoft.Json;
+@using Stardust.Nmap;
+@using System.Net;
+@using System.Text.Json;
+@using System.Text.Json.Serialization;
+@using System.ComponentModel.DataAnnotations
+@using System.Text.RegularExpressions
+@using System.Xml;
+@using Stardust.Nmap.Class;
+@using Stardust.Nmap.Enums;
+@using Stardust.GraphWrapper;
+
+@inject NavigationManager NavigationManager
+@inject GraphServiceClient GraphAPI
+@inject IJSRuntime JSRuntime;
+
+<AuthorizeView>
+    <MudContainer Class="mt-5 px-8" MaxWidth="MaxWidth.False">
+        <MudItem>
+            <MudText Typo="Typo.h5">
+                <MudToggleIconButton ToggledChanged="@OnFilterToggledChanged"
+                    Icon="@Icons.Material.Filled.FilterList" Tilte="All" Color="Color.Primary" Title="Filter managed devices"
+                    ToggledIcon="@Icons.Material.Filled.FilterList" ToggledColor="Color.Success" ToggledTitle="Show all devices">
+                </MudToggleIconButton>
+                @FilterText
+            </MudText>
+        </MudItem>
+        <MudItem xs="12" md="12" lg="12" Class="mt-3" Style="overflow-x:scroll; overscroll-behavior-x:contain">
+            <MudTable Loading="@_loading" Context="detectedDevice" Items="@SelectedDevices" Hover="true" Outlined="true" Dense="true" Bordered="true" FixedHeader="true" Height="77vh">
+                <HeaderContent>
+                    <MudTh>Local IP</MudTh>
+                    <MudTh>MAC Address</MudTh>
+                    <MudTh>Vendor</MudTh>
+                    <MudTh>Owner</MudTh>
+                    <MudTh>Hostname</MudTh>
+                    <MudTh>Scan</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Local IP">@detectedDevice.LocalIP</MudTd>
+                    <MudTd DataLabel="MAC Address">@detectedDevice.MACAddress</MudTd>
+                    <MudTd DataLabel="Vendor">@detectedDevice.Vendor</MudTd>
+                    <MudTd DataLabel="Owner">@detectedDevice.Owner</MudTd>
+                    <MudTd DataLabel="Hostname">@detectedDevice.Hostname</MudTd>
+                    <MudTd DataLabel="Scan">
+                        <MudIconButton Icon="@Icons.Material.Filled.WifiFind" Color="Color.Primary" OnClick="@(()=>GoScan(@detectedDevice?.LocalIP))"/>
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudItem>
+    </MudContainer>
+</AuthorizeView>
+
+@code
+{
+    public XmlDocument? ScanReport { get; set; } = null;
+    DevicesService devicesService = new();
+    List<string> text = new();
+    bool FilterDevices = false;
+    string FilterText = "Devices connected on Local Network";
+    bool _loading = true;
+    List<DetectedDevice> DetectedDevices = new();
+    List<DetectedDevice> DetectedDevicesFiltered = new();
+    List<DetectedDevice> SelectedDevices = new();
+
+    public async void GoScan(string? target)
+    {
+        if (target == null)
+            return;
+        await JSRuntime.InvokeVoidAsync("open", $"/device/{target.Replace(".", "-")}", "_blank");
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                ScanReport = null;
+                text.Clear();
+                await devicesService.RunNmapScanLocalNetworkAsync();
+                text = devicesService.GetResultLines();
+                ScanReport = new();
+                ScanReport.LoadXml(string.Join(string.Empty, text));
+                ParseScan();
+                SelectedDevices = DetectedDevices;
+                await CrossGraphUsers();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+                devicesService.GetErrorLines().ForEach(Console.WriteLine);
+                ScanReport = null;
+                _loading = false;
+                StateHasChanged();
+            }
+            finally
+            {
+                _loading = false;
+                StateHasChanged();
+            }
+        }
+    }
+
+    public void ParseScan()
+    {
+        if (ScanReport == null)
+            return;
+        if (DetectedDevices != null)
+            DetectedDevices.Clear();
+        else
+            DetectedDevices = new();
+        XmlNodeList HostsNodeList = ScanReport.GetElementsByTagName("host");
+
+        foreach (XmlNode hostNode in HostsNodeList)
+        {
+            var ipNode = hostNode.SelectSingleNode("address");
+            var macNode = ipNode?.NextSibling;
+            var hostnameNode = hostNode.SelectSingleNode("hostnames/hostname")?.Attributes?["name"];
+
+            var detectedDevice = new DetectedDevice
+            {
+                LocalIP = ipNode?.Attributes?["addr"]?.Value,
+                MACAddress = macNode?.Attributes?["addr"]?.Value,
+                Vendor = macNode?.Attributes?["vendor"]?.Value,
+                Hostname = hostnameNode?.Value ?? "N/A"
+            };
+            if (detectedDevice.MACAddress == null)
+                continue;
+            if (detectedDevice.Hostname != "host.docker.internal")
+                DetectedDevices.Add(detectedDevice);
+        }
+    }
+
+    private async Task CrossGraphUsers()
+    {
+        GraphWrapper graphWrapper = new(GraphAPI);
+        var managedDevices = await graphWrapper.GetAllManagedDevices();
+        if (managedDevices.Count() > 0)
+        {
+            foreach (DetectedDevice detectedDevice in DetectedDevices)
+            {
+                foreach (ManagedDevice? managedDevice in managedDevices)
+                {
+                    if (managedDevice == null)
+                        continue;
+                    if (detectedDevice.MACAddress == null || (managedDevice.WiFiMacAddress == null && managedDevice.EthernetMacAddress == null))
+                        continue;
+                    if (detectedDevice.MACAddress == managedDevice.WiFiMacAddress)
+                    {
+                        detectedDevice.Hostname = managedDevice.DeviceName;
+                        detectedDevice.Owner = managedDevice.UserPrincipalName;
+                        break;
+                    }
+                    else if (detectedDevice.MACAddress == managedDevice.EthernetMacAddress)
+                    {
+                        detectedDevice.Hostname = managedDevice.DeviceName;
+                        detectedDevice.Owner = managedDevice.UserPrincipalName;
+                        break;
+                    }
+                }
+            }
+        }
+        foreach (DetectedDevice detectedDevice in DetectedDevices)
+        {
+            if (detectedDevice.Owner == null)
+            {
+                detectedDevice.Owner = "";
+            }
+        }
+    }
+
+    public void OnFilterToggledChanged()
+    {
+        if (FilterDevices)
+        {
+            SelectedDevices = DetectedDevices;
+            FilterDevices = false;
+            FilterText = "Devices connected on Local Network";
+        }
+        else
+        {
+            DetectedDevicesFiltered = DetectedDevices.Where(x => x.Owner != "").ToList();
+            SelectedDevices = DetectedDevicesFiltered;
+            FilterText = "Managed devices connected on Local Network";
+            FilterDevices = true;
+        }
+
+        StateHasChanged();
+    }
+}

@@ -1,0 +1,113 @@
+﻿@page "/kpi/licenses"
+@using Microsoft.Graph.Beta;
+@using System.Net;
+@using Microsoft.Graph.Beta.Models;
+@using Stardust.Database.Data;
+@using Stardust.GraphWrapper;
+@using CsvHelper;
+@using System.Globalization;
+
+<AuthorizeView>
+    <MudContainer Class="mt-5 px-8" MaxWidth="MaxWidth.False">
+        <MudGrid>
+            <MudItem>
+                <MudText Typo="Typo.h5">Licenses List</MudText>
+            </MudItem>
+            <MudItem xs="12" md="12" lg="12" Style="overflow-x:scroll; overscroll-behavior-x:contain">
+                <MudDataGrid RowsPerPage="50" Dense="true" Context="dataGridContext" Loading="@_loading" @ref="dataGrid" MultiSelection="false" Items="@licenses" Filterable="true" Groupable="true" GroupExpanded="false" Height="60vh">
+                    <Columns>
+                        <PropertyColumn Property="x => x.SkuPartNumber" Title="ID" Filterable="false" Groupable="false" />
+                        <PropertyColumn Property="x => x.CapabilityStatus" Title="Status" />
+                        <PropertyColumn Property="x => x.AccountName" Title="Account" />
+                        <PropertyColumn Property="x => x.ConsumedUnits" Title="Consumed" Filterable="false" Groupable="false" />
+                        <PropertyColumn Property="x => x.PrepaidUnits.Enabled" Title="Total" Filterable="false" Groupable="false" />
+                        <PropertyColumn Property="x => x.PrepaidUnits.Enabled - x.ConsumedUnits" Title="Available" Filterable="false" Groupable="false" />
+                    </Columns>
+                    <PagerContent>
+                        <MudDataGridPager T="SubscribedSku" />
+                    </PagerContent>
+                </MudDataGrid>
+            </MudItem>
+            <MudItem>
+                <div class="d-flex flex-wrap mb-4">
+                    <MudButton OnClick="@ExpandAllGroups" Color="@Color.Primary">Expand All</MudButton>
+                    <MudButton OnClick="@CollapseAllGroups" Color="@Color.Primary">Collapse All</MudButton>
+                </div>
+            </MudItem>
+        </MudGrid>
+    </MudContainer>
+</AuthorizeView>
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    bool _loading = true;
+    bool _authenticated = true;
+    IEnumerable<SubscribedSku> licenses = new List<SubscribedSku>();
+    MudDataGrid<SubscribedSku>? dataGrid = new();
+
+    public class LicenseCSV : IDisposable
+    {
+        public string Product_Display_Name { get; set; } = "";
+        public string String_Id { get; set; } = "";
+        public string GUID { get; set; } = "";
+        public string Service_Plan_Name { get; set; } = "";
+        public string Service_Plan_Id { get; set; } = "";
+        public string Service_Plans_Included_Friendly_Names { get; set; } = "";
+
+        public void Dispose()
+        {
+            GC.SuppressFinalize(this);
+        }
+    }
+
+    void ExpandAllGroups()
+    {
+        dataGrid?.ExpandAllGroups();
+    }
+
+    void CollapseAllGroups()
+    {
+        dataGrid?.CollapseAllGroups();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+        GraphWrapper graphWrapper = new(GraphClient);
+        
+        licenses = await graphWrapper.GetSubscribedSkus();
+        _loading = false;
+        dataGrid?.ExpandAllGroups();
+        StateHasChanged();
+
+        List<LicenseCSV> products;
+
+        using (HttpClient client = new HttpClient())
+        using (Stream stream = await client.GetStreamAsync("https://download.microsoft.com/download/e/3/e/e3e9faf2-f28b-490a-9ada-c6089a1fc5b0/Product%20names%20and%20service%20plan%20identifiers%20for%20licensing.csv"))
+        using (StreamReader reader = new StreamReader(stream))
+        using (CsvReader csv = new CsvReader(reader, CultureInfo.InvariantCulture))
+        {
+            products = csv.GetRecords<LicenseCSV>().ToList();
+        }
+        Dictionary<string, LicenseCSV> productDict = new Dictionary<string, LicenseCSV>();
+        foreach (var product in products)
+        {
+            if (!productDict.ContainsKey(product.GUID))
+            {
+                productDict[product.GUID] = product;
+            }
+        }
+        foreach (SubscribedSku license in licenses)
+        {
+            if (license == null || license.SkuId == null || license.SkuId.ToString() == null)
+                continue;
+            if (productDict.ContainsKey(license.SkuId.ToString()))
+            {
+                license.SkuPartNumber = productDict[license.SkuId.ToString()].Product_Display_Name;
+            }
+        }
+        StateHasChanged();
+    }
+}

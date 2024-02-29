@@ -1,0 +1,87 @@
+﻿@page "/todotask/list"
+
+@using Stardust.Database.Data
+@using Stardust.Database.CRUD
+
+<AuthorizeView>
+    <MudContainer Class="mt-5 px-8" MaxWidth="MaxWidth.False">
+        <MudItem>
+            <MudText Typo="Typo.h5">TaskTodo List</MudText>
+        </MudItem>
+        <MudItem xs="12" md="12" lg="12" Class="mt-3" Style="overflow-x:scroll; overscroll-behavior-x:contain">
+            <MudDataGrid Context="dataGridContext" Loading="@_loading" @ref="dataGrid" MultiSelection="false" Items="@TodoTasks" Filterable="true" Groupable="true" GroupExpanded="false" Height="70vh">
+                <Columns>
+                    <PropertyColumn Property="x => x.Status" Title="Status"/> @* Grouping GroupBy="@_groupStatus"/> *@
+                    <PropertyColumn Property="x => x.Emergency" Title="Emergency"/>
+                    <PropertyColumn Property="x => x.AssignedToName" Title="Assigned To"/>
+                    <PropertyColumn Property="x => x.DeviceId" Title="Device"/>
+                    <PropertyColumn Property="x => x.Title" Title="Title" Hideable="true" Filterable="false" Groupable="false" />
+                    <PropertyColumn Property="x => x.CreatedDate" Title="Created" Filterable="true" Groupable="false" />
+                    <PropertyColumn Property="x => x.DueDate" Title="Due" Filterable="true" Groupable="false" />
+                    <TemplateColumn Filterable="false" Groupable="false">
+                        <CellTemplate Context="cellTemplateContext">
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" OnClick="@(()=>EditTask(cellTemplateContext.Item))" />
+                        </CellTemplate>
+                    </TemplateColumn>
+                </Columns>
+                <PagerContent>
+                    <MudDataGridPager T="TaskTodo"/>
+                </PagerContent>
+            </MudDataGrid>
+        </MudItem>
+        <MudItem>
+             <div class="d-flex flex-wrap mt-4">
+                 <MudButton OnClick="@ExpandAllGroups" Color="@Color.Primary">Expand All</MudButton>
+                 <MudButton OnClick="@CollapseAllGroups" Color="@Color.Primary">Collapse All</MudButton>
+             </div>
+        </MudItem>
+    </MudContainer>
+</AuthorizeView>
+
+@code {
+    IEnumerable<TaskTodo>? TodoTasks = new List<TaskTodo>();
+    MudDataGrid<TaskTodo>? dataGrid;
+    static bool _customizeGroupBy;
+    public bool _loading = true;
+
+    public async Task EditTask(TaskTodo? task)
+    {
+        if (task == null)
+            return;
+        var parameters = new DialogParameters<TaskTodoEdit> { { x => x.task, task } };
+        var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<TaskTodoEdit>("Edit Task", parameters, options);
+        var result = await dialog.Result;
+
+        TodoTasks = await StardustCRUD.GetAllTasksTodoAsync();
+        StateHasChanged();
+    }
+
+    void ExpandAllGroups()
+    {
+        dataGrid?.ExpandAllGroups();
+    }
+
+    void CollapseAllGroups()
+    {
+        dataGrid?.CollapseAllGroups();
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        TodoTasks = await StardustCRUD.GetAllTasksTodoAsync();
+        foreach (var task in TodoTasks)
+        {
+            task.AssignedToName ??= "Unassigned";
+        }
+        _loading = false;
+        dataGrid?.ExpandAllGroups();
+        StateHasChanged();
+    }
+
+    void CustomizeByGroupChanged(bool isChecked)
+    {
+        _customizeGroupBy = isChecked;
+        dataGrid?.GroupItems();
+    }
+}

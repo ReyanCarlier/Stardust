@@ -1,0 +1,66 @@
+﻿@page "/users/list"
+
+@using Microsoft.Graph.Beta;
+@using System.Net;
+@using System.Text.Json;
+@using System.Text.Json.Serialization;
+@using System.ComponentModel.DataAnnotations
+@using System.Text.RegularExpressions
+@using System.Xml;
+@using Microsoft.Graph.Beta.Models;
+@using System.Web;
+@using Newtonsoft.Json;
+@using Stardust.GraphWrapper;
+
+<AuthorizeView>
+    <MudContainer Class="mt-5 px-8" MaxWidth="MaxWidth.False">
+        <MudItem>
+            <MudText Typo="Typo.h5">Registred Users on Azure</MudText>
+        </MudItem>
+        <MudItem xs="12" md="12" lg="12" Class="mt-3" Style="overflow-x:scroll; overscroll-behavior-x:contain">
+            <MudTable Loading="@_loading" Context="organizationUser" Items="@Users" Hover="true" Outlined="true" Dense="true" Bordered="true" FixedHeader="true" Height="77vh">
+                <HeaderContent>
+                    <MudTh>Entity</MudTh>
+                    <MudTh>Name</MudTh>
+                    <MudTh>Title</MudTh>
+                    <MudTh>Mail</MudTh>
+                    <MudTh>Action</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Entity">@organizationUser.CompanyName</MudTd>
+                    <MudTd DataLabel="MAC Address">@organizationUser.DisplayName</MudTd>
+                    <MudTd DataLabel="Title">@organizationUser.JobTitle</MudTd>
+                    <MudTd DataLabel="Vendor">@organizationUser.Mail</MudTd>
+                    <MudTd DataLabel="Action"><MudIconButton Icon="@Icons.Material.Filled.ViewCozy" Color="Color.Primary" OnClick="@(()=>GoTo(organizationUser?.Id))"></MudIconButton></MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudItem>
+    </MudContainer>
+</AuthorizeView>
+
+@code {
+
+    public List<Microsoft.Graph.Beta.Models.User> Users = new List<Microsoft.Graph.Beta.Models.User>();
+    public List<Microsoft.Graph.Beta.Models.Device> UserDevices = new();
+    public bool _loading = true;
+
+    public async Task GoTo(string? id)
+    {
+        if (id == null)
+            return;
+        await JSRuntime.InvokeVoidAsync("open", $"/user/{id}", "_blank");
+    }
+
+    protected async override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            List<Device> allDevices = new List<Device>();
+
+            GraphWrapper graphWrapper = new(GraphClient);
+            Users = await graphWrapper.GetAllUsersAsync();
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+}

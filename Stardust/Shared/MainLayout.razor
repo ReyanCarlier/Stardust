@@ -1,0 +1,129 @@
+﻿@inherits LayoutComponentBase
+@using Microsoft.Graph.Beta.Models;
+@using Microsoft.Graph.Beta;
+@using Newtonsoft.Json;
+@using Stardust.ClassJSON;
+@using Stardust.Database.Data;
+
+<MudThemeProvider IsDarkMode=true/>
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<PageTitle>Stardust</PageTitle>
+
+<AuthorizeView>
+    <MudLayout>
+        <MudAppBar Elevation="1">
+            <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="MudBlazor.Edge.Start" OnClick="@((e) => DrawerToggle())" />
+            <MudText Typo="Typo.h5" Class="m1-3">Stardust</MudText>
+            <MudSpacer />
+            <MudMenu AnchorOrigin="Origin.CenterLeft" Dense="true" Class="mt-1 ml-4">
+                <ActivatorContent>
+                    <MudAvatar>
+                        <MudImage Src="@user?.Avatar"></MudImage>
+                    </MudAvatar>
+                </ActivatorContent>
+                <ChildContent>
+                    <MudCard Elevation="0" Square="true">
+                        <MudCardHeader>
+                            <CardHeaderAvatar>
+                                <MudAvatar>
+                                    <MudImage Src="@user?.Avatar"></MudImage>
+                                </MudAvatar>
+                            </CardHeaderAvatar>
+                            <CardHeaderContent>
+                                <MudText Typo="Typo.body2">@user?.DisplayName</MudText>
+                                <MudText Typo="Typo.body2">@user?.JobTitle</MudText>
+                                <MudText Typo="Typo.body2">Stardust @role</MudText>
+                            </CardHeaderContent>
+                        </MudCardHeader>
+                    </MudCard>
+                    <MudDivider Class="mb-2" />
+                    <MudListItem Text="Settings" Icon="@Icons.Material.Outlined.Settings" Href="/settings" />
+                    <MudListItem Text="Disconnect" Icon="@Icons.Material.Outlined.Login" Href="MicrosoftIdentity/Account/SignOut" />
+                </ChildContent>
+            </MudMenu>
+        </MudAppBar>
+        <MudDrawer @bind-Open="@_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="4">
+            <NavMenu />
+        </MudDrawer>
+        <MudMainContent Style="padding-bottom:2vh">
+            @Body
+        </MudMainContent>
+        <MudAppBar Elevation="1" Style="top: auto; bottom: 0" Dense="true" Fixed="true">
+            <MudGrid Justify="Justify.Center">
+                <MudText Style="font-size:small">Developped with 💜 by <MudLink Href="https://www.linkedin.com/in/reyancarlier">Reyan Carlier</MudLink></MudText>
+            </MudGrid>
+        </MudAppBar>
+    </MudLayout>
+</AuthorizeView>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    bool _drawerOpen = true;
+    private MudTheme _theme = new();
+    public MicrosoftUser? user { get; set; }
+    public StardustUserRole? role { get; set; }
+    void DrawerToggle()
+    {
+        _drawerOpen = !_drawerOpen;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthenticationStateTask == null)
+            return;
+        var authState = await AuthenticationStateTask;
+
+        if (authState?.User?.Identity?.IsAuthenticated != null && authState.User.Identity.IsAuthenticated)
+        {
+            try
+            {
+                user = new();
+
+                var user1 = await GraphClient.Me.GetAsync();
+                try
+                {
+                    var photo = await GraphClient.Me.Photo.Content.GetAsync();
+                    user.Avatar = "";
+                    if (photo != null)
+                    {
+                        using (var memoryStream = new MemoryStream())
+                        {
+                            await photo.CopyToAsync(memoryStream);
+                            byte[] photoContent = memoryStream.ToArray();
+                            user.Avatar = $"data:image/png;base64,{Convert.ToBase64String(photoContent)}";
+                        }
+                    }
+                }
+                catch
+                {
+                    user.Avatar = "";
+                }
+                user.JobTitle = user1?.JobTitle;
+                user.DisplayName = user1?.DisplayName;
+                StardustUser? stardustUser = await StardustCRUD.GetUserByEmailAsync(user1?.Mail);
+                if (stardustUser == null)
+                {
+                    stardustUser = new StardustUser();
+                    stardustUser.Name = user1?.UserPrincipalName;
+                    stardustUser.Email = user1?.Mail;
+                    stardustUser.Role = StardustUserRole.User;
+                    stardustUser.GraphUserId = user1?.Id;
+                    stardustUser.Avatar = user.Avatar;
+                    stardustUser.Role = StardustUserRole.User;
+                    stardustUser.Created_at = DateTime.Now;
+                    await StardustCRUD.CreateUserAsync(stardustUser);
+                }
+                role = stardustUser.Role;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+                ConsentHandler.HandleException(ex);
+            }
+        }
+    }
+}

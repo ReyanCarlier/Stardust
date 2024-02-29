@@ -1,0 +1,53 @@
+﻿@page "/defender/alerts"
+
+@using Microsoft.Graph.Beta;
+@using System.Net;
+@using System.Text.Json;
+@using System.Text.Json.Serialization;
+@using System.ComponentModel.DataAnnotations
+@using System.Text.RegularExpressions
+@using System.Xml;
+@using Microsoft.Graph.Beta.Models;
+@using System.Web;
+@using Newtonsoft.Json;
+@using Stardust.GraphWrapper;
+@using Stardust.Wrapper;
+
+<AuthorizeView>
+    <MudContainer Class="mt-5 px-8" MaxWidth="MaxWidth.False">
+        <MudItem>
+            <MudText Typo="Typo.h5">Windows Defender Alerts</MudText>
+        </MudItem>
+        <MudItem xs="12" md="12" lg="12" Class="mt-3" Style="overflow-x:scroll; overscroll-behavior-x:contain">
+            <MudTable Loading="@_loading" Context="alertsContext" Items="@AlertsList" Hover="true" Outlined="true" Dense="true" Bordered="true" FixedHeader="true" Height="77vh">
+                <HeaderContent>
+                    <MudTh>Entity</MudTh>
+                    <MudTh>Name</MudTh>
+                    <MudTh>Title</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Entity">@alertsContext.Category</MudTd>
+                    <MudTd DataLabel="MAC Address">@alertsContext.Severity</MudTd>
+                    <MudTd DataLabel="Title">@alertsContext.Description</MudTd> 
+                </RowTemplate>
+            </MudTable>
+        </MudItem>
+    </MudContainer>
+</AuthorizeView>
+
+@code {
+
+    public List<Microsoft.Graph.Beta.Models.Alert>? AlertsList;
+    public bool _loading = true;
+
+    protected async override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            WindowsDefenderWrapper wdw = new(GraphClient);
+            AlertsList = await wdw.GetAllAlertsAsync();
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+}

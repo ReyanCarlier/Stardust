@@ -1,0 +1,133 @@
+﻿@page "/devices/managed"
+@using System.Diagnostics;
+@using Microsoft.Graph.Beta;
+@using Microsoft.Graph.Beta.Models;
+@using Newtonsoft.Json;
+@using Stardust.Nmap;
+@using System.Net;
+@using System.Text.Json;
+@using System.Text.Json.Serialization;
+@using System.ComponentModel.DataAnnotations
+@using System.Text.RegularExpressions
+@using System.Xml;
+@using Stardust.Nmap.Class;
+@using Stardust.GraphWrapper;
+@using Stardust.Nmap.Enums;
+
+<AuthorizeView>
+    <MudContainer Class="mt-5 px-8" MaxWidth="MaxWidth.False">
+        <MudItem>
+            <MudText Typo="Typo.h5">Managed Devices</MudText>
+        </MudItem>
+        <MudItem xs="12" md="12" lg="12" Class="mt-3" Style="overflow-x:scroll; overscroll-behavior-x:contain">
+            <MudTable Loading="@_loading" Context="managedDevice" Items="@ManagedDevices" Hover="true" Outlined="true" Dense="true" Bordered="true" FixedHeader="true" Height="77vh">
+                <HeaderContent>
+                    <MudTh>Name</MudTh>
+                    <MudTh>Owner</MudTh>
+                    <MudTh>OnLocalNetwork</MudTh>
+                    <MudTh>WFMA</MudTh>
+                    <MudTh>Scan</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Name">@managedDevice?.DeviceName</MudTd>
+                    <MudTd DataLabel="Owner">@managedDevice?.UserPrincipalName</MudTd>
+                    <MudTd DataLabel="OnLocalNetwork">@managedDevice?.AdditionalData["OnLocalNetwork"]?.ToString()</MudTd>
+                    <MudTd DataLabel="WFMA">@managedDevice?.WiFiMacAddress</MudTd>
+                    <MudTd DataLabel="Scan">
+                        @if ((bool?)managedDevice?.AdditionalData["OnLocalNetwork"] == true)
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.WifiFind" Color="Color.Primary" OnClick="@(()=>GoScan(@managedDevice?.AdditionalData?["LocalIP"].ToString()))"/>
+                        }
+                        else
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.WifiFind" Color="Color.Error" Disabled="true" />
+                        }
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudItem>
+    </MudContainer>
+</AuthorizeView>
+
+
+
+@code {
+    bool _loading = true;
+    List<ManagedDevice?> ManagedDevices = new();
+    DevicesService DevicesService = new();
+    List<DetectedDevice> DetectedDevices = new();
+
+    public async void GoScan(string? target)
+    {
+        if (target == null || target == "")
+            return;
+        await JSRuntime.InvokeVoidAsync("open", $"/device/{target.Replace(".", "-")}", "_blank");
+    }
+
+    private void ParseScan(XmlDocument? ScanReport)
+    {
+        if (ScanReport == null)
+            return;
+        if (DetectedDevices != null)
+            DetectedDevices.Clear();
+        else
+            DetectedDevices = new();
+        XmlNodeList HostsNodeList = ScanReport.GetElementsByTagName("host");
+
+        foreach (XmlNode hostNode in HostsNodeList)
+        {
+            var ipNode = hostNode.SelectSingleNode("address");
+            var macNode = ipNode?.NextSibling;
+            var hostnameNode = hostNode.SelectSingleNode("hostnames/hostname")?.Attributes?["name"];
+
+            var detectedDevice = new DetectedDevice
+            {
+                LocalIP = ipNode?.Attributes?["addr"]?.Value,
+                MACAddress = macNode?.Attributes?["addr"]?.Value,
+                Vendor = macNode?.Attributes?["vendor"]?.Value,
+                Hostname = hostnameNode?.Value ?? "N/A"
+            };
+            if (detectedDevice.MACAddress != null)
+                detectedDevice.MACAddress = detectedDevice.MACAddress.ToUpper();
+            else
+                continue;
+            if (detectedDevice.Hostname != "host.docker.internal")
+                DetectedDevices.Add(detectedDevice);
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            GraphWrapper graphWrapper = new(GraphClient);
+            ManagedDevices = await graphWrapper.GetAllManagedDevices();
+            _loading = false;
+            StateHasChanged();
+
+            await DevicesService.RunNmapScanLocalNetworkAsync();
+            List<string> text = DevicesService.GetResultLines();
+            XmlDocument? ScanReport = new();
+            ScanReport.LoadXml(string.Join(string.Empty, text));
+            ParseScan(ScanReport);
+
+            foreach (ManagedDevice? managedDevice in ManagedDevices)
+            {
+                if (managedDevice == null)
+                    continue;
+                foreach (DetectedDevice? detectedDevice in DetectedDevices)
+                {
+                    if (detectedDevice == null)
+                        continue;
+                    if (detectedDevice.MACAddress == managedDevice.WiFiMacAddress)
+                    {
+                        managedDevice.AdditionalData["OnLocalNetwork"] = true;
+                        managedDevice.AdditionalData["LocalIP"] = detectedDevice.LocalIP;
+                        break;
+                    }
+                }
+            }
+            StateHasChanged();
+        }
+    }
+}

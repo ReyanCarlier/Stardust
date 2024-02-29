@@ -1,0 +1,152 @@
+﻿@page "/kpi/tickets"
+@using Microsoft.Graph.Beta;
+@using System.Net;
+@using Stardust.GraphWrapper;
+@using CsvHelper;
+@using System.Globalization;
+@using Atlassian.Jira;
+@using Stardust.Wrapper;
+@using Stardust.Database.Data;
+
+<AuthorizeView>
+    <MudContainer Class="mt-5 px-8" MaxWidth="MaxWidth.False">
+        @if (_authenticated)
+        {
+            <MudGrid>
+                <MudItem>
+                    <MudText Typo="Typo.h5">Jira Tickets</MudText>
+                </MudItem>
+                <MudItem xs="12" md="12" lg="12" Style="overflow-x:scroll; overscroll-behavior-x:contain">
+                    <MudDataGrid RowsPerPage="100" FixedHeader="true" Dense="true" Context="dataGridContext" Loading="@_loading" @ref="dataGrid" MultiSelection="false" Items="@Issues" Filterable="true" Groupable="true" GroupExpanded="false" Height="60vh">
+                        <Columns>
+                            <PropertyColumn Property="x => x.JiraIdentifier" Title="ID" Filterable="false" Groupable="false" />
+                            <PropertyColumn Property="x => x.Status.Name" Title="Status" Sortable="false" Groupable="true" />
+                            <PropertyColumn Property="x => TicketEntity(x.Project)" Title="Project" Filterable="true" Groupable="true" />
+                            <PropertyColumn Property="x => x.Priority" Title="Priority" />
+                            <PropertyColumn Property="x => x.Summary" Title="Summary" />
+                        </Columns>
+                        <PagerContent>
+                            <MudDataGridPager T="Issue" />
+                        </PagerContent>
+                    </MudDataGrid>
+                </MudItem>
+                <MudItem>
+                    <div class="d-flex flex-wrap mb-4">
+                        <MudButton OnClick="@ExpandAllGroups" Color="@Color.Primary">Expand All</MudButton>
+                        <MudButton OnClick="@CollapseAllGroups" Color="@Color.Primary">Collapse All</MudButton>
+                    </div>
+                </MudItem>
+            </MudGrid>
+        }
+        else
+        {
+            <MudAlert Severity="Severity.Error" Elevation="4">
+                We were unable to authenticate you on Jira.
+                Please check in your <MudLink Href="/settings">settings</MudLink> that you have correctly entered your email and JIRA Token.
+            </MudAlert>
+        }
+    </MudContainer>
+</AuthorizeView>
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    bool _loading = true;
+    bool _authenticated = true;
+    List<Issue> Issues = new List<Issue>();
+    MudDataGrid<Issue>? dataGrid = new();
+    StardustUser? stardustUser = new StardustUser();
+
+    public static string TicketEntity(string dim)
+    {
+        /*
+         * This function is used to convert the project key to a more human-readable format.
+         * For example, the project key "STAR" will be converted to "Stardust".
+         * You can add more cases if you have more project keys in your Jira.
+         * If you don't have any project keys, you can remove this function and the call to it in the MudDataGrid.
+         */
+        switch(dim)
+        {
+            case "STAR":
+                return "Stardust";
+            default:
+                return dim;
+        }
+    }
+
+    void ExpandAllGroups()
+    {
+        dataGrid?.ExpandAllGroups();
+    }
+
+    void CollapseAllGroups()
+    {
+        dataGrid?.CollapseAllGroups();
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthenticationStateTask == null)
+            return;
+        var authState = await AuthenticationStateTask;
+
+        if (authState?.User?.Identity?.IsAuthenticated != null && authState.User.Identity.IsAuthenticated)
+        {
+            try
+            {
+                stardustUser = await StardustCRUD.GetUserByEmailAsync(authState.User.Identity.Name);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+            }
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+        if (stardustUser == null || stardustUser.JiraMail == null || stardustUser.JiraToken == null)
+        {
+            _authenticated = false;
+            StateHasChanged();
+            return;
+        }
+        JiraClient jiraClient = new JiraClient("https://quanteam.atlassian.net", stardustUser.JiraMail, stardustUser.JiraToken);
+        if (!await jiraClient.IsConnectedAsync())
+        {
+            _authenticated = false;
+            StateHasChanged();
+            return;
+        }
+        List<string> projectKeys = await jiraClient.GetAllProjectsKeysAsync();
+
+        foreach (var key in projectKeys)
+        {
+            var issuesTest = await jiraClient.GetIssuesAsync(key);
+            foreach (var iss in issuesTest)
+            {
+                if (iss.Status != "Terminé" && iss.Status != "Résolu" && iss.Status != "Publié")
+                    Issues.Add(iss);
+            }
+            await jiraClient.GetAllAssets();
+        }
+        //await jiraClient.GetAllAssets();
+        // var issuesTes2t = await jiraClient.Get($"project IN (projectsWhereUserHasRole(\"Administrators\"))");
+        // foreach (var issue in issuesTes2t)
+        // {
+        //     Console.WriteLine(issue.Status);
+        // }
+        // var issues = await jiraClient._jiraClient.Issues.GetIssuesFromJqlAsync($"project IN (projectsWhereUserHasRole(\"Administrators\")) AND status NOT IN (Annulé, Canceled, Closed, Completed, Declined, Done, EMPTY, Brouillon, Completed, Done) ORDER BY created DESC");
+        // foreach (var issue in issues)
+        // {
+        //     Issues.Add(issue);
+        // }
+        
+        dataGrid?.ExpandAllGroups();
+        _loading = false;
+
+        StateHasChanged();
+    }
+}

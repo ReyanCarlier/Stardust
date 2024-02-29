@@ -1,0 +1,88 @@
+﻿@using Stardust.Database.Data;
+
+<MudNavMenu>
+    <MudNavLink Icon="@Icons.Material.Filled.Dashboard" Href="/" Match="NavLinkMatch.All">Dashboard</MudNavLink>
+    <MudDivider />
+    <MudNavGroup Icon="@Icons.Material.Filled.AutoFixHigh" Title="Tools" Expanded="false">
+        <MudDivider />
+        <MudNavLink Icon="@Icons.Material.Filled.PermScanWifi" Href="/tools/externalscan" Match="NavLinkMatch.Prefix">External Scanner</MudNavLink>
+    </MudNavGroup>
+    <MudDivider />
+    <MudNavGroup Icon="@Icons.Material.Filled.DeviceHub" Title="Devices" Expanded="false">
+        <MudDivider />
+        <MudNavLink Icon="@Icons.Material.Filled.BroadcastOnPersonal" Href="/devices/local" Match="NavLinkMatch.Prefix">Local Devices</MudNavLink>
+        <MudNavLink Icon="@Icons.Material.Filled.BroadcastOnHome" Href="/devices/managed" Match="NavLinkMatch.Prefix">Managed Devices</MudNavLink>
+    </MudNavGroup>
+    <MudDivider />
+    <MudNavGroup Icon="@Icons.Material.Filled.BugReport" Title="Tasks" Expanded="false">
+        <MudDivider />
+        <MudNavLink Icon="@Icons.Material.Filled.ViewList" Href="/todotask/list" Match="NavLinkMatch.Prefix">List</MudNavLink>
+        <MudNavLink Icon="@Icons.Material.Filled.AddBox" Href="/todotask/add" Match="NavLinkMatch.Prefix">Create</MudNavLink>
+    </MudNavGroup>
+    <MudDivider />
+    <MudNavGroup Icon="@Icons.Material.Filled.Description" Title="Scripts" Expanded="false">
+        <MudDivider />
+        <MudNavLink Icon="@Icons.Material.Filled.ViewList" Href="/scripts/list" Match="NavLinkMatch.Prefix">List</MudNavLink>
+        <MudNavLink Icon="@Icons.Material.Filled.AddBox" Href="/scripts/add" Match="NavLinkMatch.Prefix">Create</MudNavLink>
+    </MudNavGroup>
+    <MudDivider />
+    <MudNavGroup Icon="@Icons.Material.Filled.Key" Title="K.P.I." Expanded="false">
+        <MudDivider />
+        <MudNavLink Icon="@Icons.Material.Filled.ViewList" Href="/kpi/licenses" Match="NavLinkMatch.Prefix">Licenses</MudNavLink>
+        <MudNavLink Icon="@Icons.Custom.Brands.Telegram" Href="/kpi/tickets" Match="NavLinkMatch.Prefix">Tickets</MudNavLink>
+    </MudNavGroup>
+    <MudDivider />
+    <MudNavGroup Icon="@Icons.Material.Filled.SupervisedUserCircle" Title="Users" Expanded="false">
+        <MudDivider />
+        <MudNavLink Icon="@Icons.Material.Filled.ViewList" Href="/users/list" Match="NavLinkMatch.Prefix">List</MudNavLink>
+    </MudNavGroup>
+    <MudDivider />
+    
+    <MudDivider />
+    @if (stardustUser.Role == StardustUserRole.SuperAdmin)
+    {
+        <MudNavGroup Icon="@Icons.Material.Filled.AdminPanelSettings" Title="Admin Area" Expanded="false">
+            <MudDivider />
+            <MudNavLink Icon="@Icons.Material.Filled.ViewList" Href="/admin/users" Match="NavLinkMatch.Prefix">Stardust Users</MudNavLink>
+            <MudNavLink Icon="@Icons.Material.Filled.Radar" Href="/admin/globalscan" Match="NavLinkMatch.Prefix">Global Scan</MudNavLink>
+        </MudNavGroup>
+        <MudDivider />
+    }
+</MudNavMenu>
+
+@code {
+    public StardustUser stardustUser { get; set; } = new StardustUser();
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthenticationStateTask == null)
+            return;
+        var authState = await AuthenticationStateTask;
+
+        if (authState?.User?.Identity?.IsAuthenticated != null && authState.User.Identity.IsAuthenticated)
+        {
+            try
+            {
+                var user = await GraphClient.Me.GetAsync();
+                if (user == null)
+                    return;
+                List<StardustUser> stardustUsers = await StardustCRUD.GetUsersAsync();
+                foreach (StardustUser stardustUserItem in stardustUsers)
+                {
+                    if (stardustUserItem?.Name?.ToLower() == user?.DisplayName?.ToLower())
+                    {
+                        stardustUser = stardustUserItem;
+                        StateHasChanged();
+                        return;
+                    }
+                }
+            }
+            catch
+            {
+                return;
+            }
+        }
+    }
+}

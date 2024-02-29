@@ -1,0 +1,27 @@
+﻿@using System.Net.Http
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components.Routing
+@using Microsoft.AspNetCore.Components.Web
+@using Microsoft.AspNetCore.Components.Web.Virtualization
+@using Microsoft.Graph.Beta;
+@using Microsoft.JSInterop
+@using Stardust
+@using Stardust.Pages.Admin;
+@using Stardust.Shared
+@using System.Security.Claims
+
+@using MudBlazor
+@using Microsoft.Identity.Abstractions
+@using Microsoft.Identity.Web;
+@using Stardust.Database.CRUD;
+
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
+@inject MicrosoftIdentityConsentAndConditionalAccessHandler ConsentHandler
+@inject StardustCRUD StardustCRUD
+@inject IDialogService DialogService
+@inject GraphServiceClient GraphClient
+@inject ISnackbar Snackbar
+@inject BackgroundGlobalScanService GlobalScanService

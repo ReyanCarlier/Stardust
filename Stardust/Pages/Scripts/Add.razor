@@ -1,0 +1,100 @@
+﻿@page "/scripts/add"
+@using Stardust.Database.Data
+@using Stardust.Database.CRUD
+
+<AuthorizeView>
+    <MudContainer Class="mt-8 px-8" MaxWidth="MaxWidth.False">
+        <MudItem>
+            <MudText Typo="Typo.h4">Add Script</MudText>
+        </MudItem>
+        <MudItem xs="12" sm="12" Style="height:78vh;">
+            <EditForm Context="AddNewScriptContext" Model="@newScript" OnValidSubmit="addNewScript">
+                <DataAnnotationsValidator />
+                <MudCard Elevation="4">
+                    <MudCardContent>
+                        <MudTextField T="string" Label="Name" @bind-Value="newScript.Name" For="@(() => newScript.Name)" />
+                        <MudTextField T="string" Label="Description" Lines="3" @bind-Value="newScript.Description" For="@(() => newScript.Description)" />
+                        <MudTextField T="string" Label="Content" Lines="5" @bind-Value="newScript.ScriptContent" For="@(() => newScript.ScriptContent)" />
+                        <MudTextField Label="Concerned Ports" @bind-Value="_message" For="@(() => _message)" />
+                        <MudSelect @bind-Value="newScript.Category" T="ScriptCategory" Label="Script Category">
+                        @foreach (ScriptCategory category in Enum.GetValues(typeof(ScriptCategory)))
+                        {
+                            <MudSelectItem Value="@category">@category</MudSelectItem>
+                        }
+                        </MudSelect>
+                    </MudCardContent>
+                    <MudCardActions Class="align-content-center justify-content-center">
+                        <MudButton StartIcon="@Icons.Material.Filled.AddModerator" Disabled="@_processing" ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" Class="m1-auto">
+                        @if (_processing)
+                        {
+                            <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                            <MudText Class="ms-2">Adding...</MudText>
+                        }
+                        else
+                        {
+                            <MudText>Add to Database</MudText>
+                        }
+                        </MudButton>
+                    </MudCardActions>
+                </MudCard>
+            </EditForm>
+        </MudItem>
+    </MudContainer>
+</AuthorizeView>
+
+@code {
+
+    public List<Script> scripts = new List<Script>();
+    public Script newScript = new Script();
+    public bool _processing = false;
+    public string _message = "";
+
+    public async Task addNewScript()
+    {
+        _processing = true;
+        newScript.Id = scripts.Count + 1;
+
+        string? portsList = "";
+        if (_message == "all")
+        {
+            for (int i = 0; i < 65535; i++)
+            {
+                portsList += i + ",";
+            }
+        }
+        else if (_message != "none")
+        {
+            portsList = _message;
+        }
+        else
+        {
+            portsList = "";
+        }
+        newScript.ConcernedPorts = portsList;
+        if (scripts.Any(s => s.Name == newScript.Name) || scripts.Any(s => s.Description == newScript.Description))
+        {
+            _processing = false;
+            return;
+        }
+        if (await StardustCRUD.AddScriptAsync(newScript) == false)
+        {
+            var parameters = new DialogParameters<Components.Dialog>();
+            parameters.Add("Message", "An error occured while adding the script to the database.");
+            parameters.Add("OkText", "Ok");
+            parameters.Add("Color", Color.Error);
+            var dialog = DialogService.Show<Components.Dialog>("Error", parameters);
+            _processing = false;
+            return;
+        }
+        else
+        {
+            var parameters = new DialogParameters<Components.Dialog>();
+            parameters.Add("Message", "The script has been added to the database.");
+            parameters.Add("OkText", "Ok");
+            parameters.Add("Color", Color.Success);
+            var dialog = DialogService.Show<Components.Dialog>("Success", parameters);
+        }
+        scripts = await StardustCRUD.GetScriptsAsync();
+        _processing = false;
+    }
+}

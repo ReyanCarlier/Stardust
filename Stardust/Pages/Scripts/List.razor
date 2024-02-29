@@ -1,0 +1,203 @@
+﻿@page "/scripts/list"
+@using Stardust.Database.Data
+@using Stardust.Database.CRUD
+
+<AuthorizeView>
+    <MudContainer Class="mt-5 px-8" MaxWidth="MaxWidth.False">
+        <MudItem>
+            <MudText Typo="Typo.h5">Scripts List</MudText>
+        </MudItem>
+        <MudItem xs="12" md="12" lg="12" Class="mt-3" Style="overflow-x:scroll; overscroll-behavior-x:contain">
+            <MudDataGrid Context="dataGridContext" Loading="@_loading" @ref="dataGrid" MultiSelection="false" Items="@knownScripts" Filterable="true" Groupable="true" GroupExpanded="false" Height="75vh">
+                <Columns>
+                    <PropertyColumn Property="x => x.Category" Title="Category" />
+                    <PropertyColumn Property="x => x.Type" Title="Type" />
+                    <PropertyColumn Property="x => x.Default" Title="Default" />
+                    <PropertyColumn Property="x => x.Name" Title="Name" />
+                    <PropertyColumn Class="d-none d-lg-table-cell" Property="x => x.Description" Title="Description" Hideable="true" Filterable="false" Groupable="false" />
+                    @* <PropertyColumn Property="x => x.CreatedDate" Title="Created" Filterable="true" Groupable="false" />
+                    <PropertyColumn Property="x => x.DueDate" Title="Due" Filterable="true" Groupable="false" /> *@
+                </Columns>
+                <PagerContent>
+                    <MudDataGridPager T="Script" />
+                </PagerContent>
+            </MudDataGrid>
+        </MudItem>
+        <MudItem>
+            <div class="d-flex flex-wrap mt-4">
+                <MudButton OnClick="@ExpandAllGroups" Color="@Color.Primary">Expand All</MudButton>
+                <MudButton OnClick="@CollapseAllGroups" Color="@Color.Primary">Collapse All</MudButton>
+            </div>
+        </MudItem>
+    </MudContainer>
+</AuthorizeView>
+
+@code {
+    public IEnumerable<Script> knownScripts = new List<Script>();
+    private bool _loading = true;
+    MudDataGrid<Script>? dataGrid = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _loading = true;
+        knownScripts = await StardustCRUD.GetScriptsAsync();
+        _loading = false;
+        StateHasChanged();
+        dataGrid?.ExpandAllGroups();
+        return;
+    }
+
+    void ExpandAllGroups()
+    {
+        dataGrid?.ExpandAllGroups();
+    }
+
+    void CollapseAllGroups()
+    {
+        dataGrid?.CollapseAllGroups();
+    }
+
+    // protected override async Task OnAfterRenderAsync(bool firstRender)
+    // {
+    //     if (firstRender)
+    //     {
+    //         knownScripts = await StardustCRUD.GetScriptsAsync();
+    //         await UpdateScripts();
+    //         _loading = false;
+    //         StateHasChanged();
+    //     }
+    // }
+
+    private async Task UpdateScripts()
+    {
+        if (Program.NmapScriptFolder == null)
+        {
+            return;
+        }
+        string[] filenames = Directory.GetFiles(Program.NmapScriptFolder);
+        foreach (string filename in filenames)
+        {
+            if (filename.Contains("version") || !filename.Contains(".nse"))
+                continue;
+            string parsedname = filename.Replace(Program.NmapScriptFolder, "");
+            parsedname = parsedname.Replace(".nse", "");
+            string content = File.ReadAllText(filename);
+            string description = "";
+            string[] splitedFile = content.Split("[[");
+            if (splitedFile.Length > 1)
+            {
+                description = splitedFile[1].Split("]]")[0];
+            }
+            else
+            {
+                description = "No description.";
+            }
+
+            string elements = "";
+            ScriptType scriptType = ScriptType.Safe;
+            ScriptCategory scriptCategory;
+            ScriptDefault scriptDefault = ScriptDefault.False;
+            string categoryString = "";
+            string[] splitedFile2 = content.Split("categories = {");
+            if (splitedFile2.Length > 1)
+            {
+                elements = splitedFile2[1].Split("}")[0];
+                string[] splittedelements = elements.Split(",");
+                if (splittedelements.Length > 0)
+                {
+                    foreach (string line in splittedelements)
+                    {
+                        if (line.Contains("default"))
+                            scriptDefault = ScriptDefault.True;
+                        else if (line.Contains("intrusive"))
+                            scriptType = ScriptType.Intrusive;
+                        else if (!line.Contains("safe"))
+                            categoryString = line;
+                    }
+                }
+                categoryString.Replace("\\", "");
+                categoryString.Replace("\'", "");
+                categoryString.Trim();
+            }
+            else
+            {
+                categoryString = "No category";
+            }
+
+            switch (categoryString)
+            {
+                case "\"default\"":
+                    scriptCategory = ScriptCategory.Default;
+                    break;
+                case "\"auth\"":
+                    scriptCategory = ScriptCategory.Authentication;
+                    break;
+                case "\"brute\"":
+                    scriptCategory = ScriptCategory.Brute;
+                    break;
+                case "\"broadcast\"":
+                    scriptCategory = ScriptCategory.Broadcast;
+                    break;
+                case "\"discovery\"":
+                    scriptCategory = ScriptCategory.Discovery;
+                    break;
+                case "\"external\"":
+                    scriptCategory = ScriptCategory.External;
+                    break;
+                case "\"intrusive\"":
+                    scriptCategory = ScriptCategory.Intrusive;
+                    break;
+                case "\"malware\"":
+                    scriptCategory = ScriptCategory.Malware;
+                    break;
+                case "\"safe\"":
+                    scriptCategory = ScriptCategory.Safe;
+                    break;
+                case "\"version\"":
+                    scriptCategory = ScriptCategory.Version;
+                    break;
+                case "\"fuzzer\"":
+                    scriptCategory = ScriptCategory.Fuzzer;
+                    break;
+                case "\"exploit\"":
+                    scriptCategory = ScriptCategory.Exploit;
+                    break;
+                case "\"vuln\"":
+                    scriptCategory = ScriptCategory.Vulnerability;
+                    break;
+                default:
+                    scriptCategory = ScriptCategory.Default;
+                    break;
+            }
+
+            bool found = false;
+            foreach (Script script in knownScripts)
+            {
+                if (script.Name == parsedname)
+                {
+                    script.Description = description;
+                    script.Default = scriptDefault;
+                    script.Type = scriptType;
+                    script.Category = scriptCategory;
+                    script.ScriptContent = content;
+                    await StardustCRUD.UpdateScriptAsync(script);
+                    found = true;
+                    break;
+                }
+            }
+            if (!found)
+            {
+                Script newScript = new Script
+                {
+                    Name = parsedname,
+                    Description = description,
+                    Default = scriptDefault,
+                    Type = scriptType,
+                    Category = scriptCategory,
+                    ScriptContent = content
+                };
+                await StardustCRUD.AddScriptAsync(newScript);
+            }
+        }
+    }
+}

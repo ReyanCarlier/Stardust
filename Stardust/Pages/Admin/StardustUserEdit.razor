@@ -1,0 +1,60 @@
+﻿@using Stardust.Database.Data;
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Edit" Class="mr-3 mb-n1" />
+            Edit User @targetStardustUser.Id
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudTextField ReadOnly="true" Label="Name" @bind-Value="targetStardustUser.Name"/>
+        <MudTextField ReadOnly="true" Label="Email" @bind-Value="targetStardustUser.Email" />
+        <MudSelect @bind-Value="targetStardustUser.Role" T="StardustUserRole" Label="Role">
+        @foreach (StardustUserRole role in Enum.GetValues(typeof(StardustUserRole)))
+        {
+            if (role <= @currentStardustUser?.Role)
+            {
+                <MudSelectItem Value="@role">@role</MudSelectItem>
+            }
+        }
+        </MudSelect>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Warning" OnClick="(() => EditUser())">Edit</MudButton>
+    </DialogActions>
+</MudDialog>
+@code {
+    [CascadingParameter] MudDialogInstance? MudDialog { get; set; }
+    [Parameter] public StardustUser? currentStardustUser { get; set; } = new();
+    [Parameter] public StardustUser targetStardustUser { get; set; } = new StardustUser();
+    public bool _loaded = false;
+    public StardustUser? userCopy;
+    public List<StardustUser> stardustUsers = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        userCopy = targetStardustUser;
+        stardustUsers = await StardustCRUD.GetUsersAsync();
+        return;
+    }
+    private void Cancel()
+    {
+        MudDialog?.Cancel();
+        targetStardustUser = userCopy ?? new();
+    }
+
+    private async Task EditUser()
+    {
+        bool edited = await StardustCRUD.UpdateUserAsync(targetStardustUser);
+        if (edited)
+            Snackbar.Add("User edited !", Severity.Success);
+        else
+        {
+            Snackbar.Add("Couldn't edit User.", Severity.Error);
+            targetStardustUser = userCopy ?? new();
+        }
+        MudDialog?.Close(DialogResult.Ok(targetStardustUser?.Id));
+    }
+}

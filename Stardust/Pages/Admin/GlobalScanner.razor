@@ -1,0 +1,294 @@
+﻿@page "/admin/globalscan"
+@using Microsoft.Graph.Beta.Models;
+@using Stardust.Database.Data;
+@using Stardust.Nmap;
+@using Stardust.Nmap.Class;
+@using System.Xml;
+@using Stardust.GraphWrapper;
+
+<AuthorizeView>
+    @if (stardustUser.Role >= StardustUserRole.Admin)
+    {
+        <MudContainer Class="mt-5 px-8" MaxWidth="MaxWidth.False">
+            <MudGrid Justify="Justify.Center">
+                <MudItem xs="12" sm="12" md="3">
+                    <MudPaper Elevation="4" Class="d-flex flex-row pt-6 pb-4 align-content-center" Style="height: 10vh;">
+                        @if (!((GlobalScanService.ScannableDevices.Count() > 0 && Stardust.Program.GlobalScanPending)))
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.ScreenSearchDesktop" Color="Color.Tertiary" Class="mx-4" Style="width:5vh; height:5vh;"></MudIcon>
+                            <div>
+                                <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mb-n1">Scannable Managed Devices</MudText>
+                                <MudText Typo="Typo.h5">@GlobalScanService.ScannableDevices.Count()</MudText>
+                            </div>
+                        }
+                        else
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.CalendarToday" Color="Color.Primary" Class="mx-4" Style="width:5vh; height:5vh;"></MudIcon>
+                            <div>
+                                <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mb-n1">Global Scan Status</MudText>
+                                <MudText Typo="Typo.h5">@_count / @GlobalScanService.ScannableDevices.Count()</MudText>
+                            </div>
+                        }
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="12" sm="12" md="3">
+                    <MudPaper Elevation="4" Class="d-flex flex-row pt-6 pb-4 align-content-center" Style="height: 10vh;">
+                        @if (Stardust.Program.GlobalScanPending)
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.HourglassBottom" Color="Color.Warning" Class="mx-4" Style="width:5vh; height:5vh;"></MudIcon>
+                            <div>
+                                <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mb-n1">Global Scan</MudText>
+                                <MudText Typo="Typo.h5">Active</MudText>
+                            </div>
+                        }
+                        else
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.HourglassTop" Color="Color.Secondary" Class="mx-4" Style="width:5vh; height:5vh;"></MudIcon>
+                            <div>
+                                <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mb-n1">Scanner Status</MudText>
+                                <MudText Typo="Typo.h5">Inactive</MudText>
+                            </div>
+                        }
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="12" sm="12" md="3">
+                    <MudPaper Elevation="4" Class="d-flex flex-row pt-6 pb-4 align-content-center" Style="height: 10vh;">
+                        <MudIcon Icon="@Icons.Material.Filled.Radar" Color="Color.Primary" Class="mx-4" Style="width:5vh; height:5vh;"></MudIcon>
+                        <div>
+                            <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mb-n1">Global Scan made</MudText>
+                            <MudText Typo="Typo.h5">@globalScans?.Count()</MudText>
+                        </div>
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="12" sm="12" md="3">
+                    <MudPaper Elevation="4" Class="d-flex flex-row pt-6 pb-4 align-content-center" Style="height: 10vh;">
+                        <MudIcon Icon="@Icons.Material.Filled.CalendarToday" Color="Color.Primary" Class="mx-4" Style="width:5vh; height:5vh;"></MudIcon>
+                        <div>
+                            <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mb-n1">Last Global Scan</MudText>
+                            <MudText Typo="Typo.h5">@LastScan?.Ended_At</MudText>
+                        </div>
+                    </MudPaper>
+                </MudItem>
+                @if (GlobalScanService.ScannableDevices.Count() > 0 && Stardust.Program.GlobalScanPending)
+                {
+                    <MudProgressLinear Color="Color.Primary" Value="@Value" Size="Size.Large" Class="my-7">
+                        <MudText Typo="Typo.subtitle1" Color="Color.Surface">
+                            <b>@_count / @_countTotal</b>
+                        </MudText>
+                    </MudProgressLinear>
+                }
+                <MudItem xs="12" md="12" lg="12" sm="12">
+                    <MudGrid Justify="Justify.Center">
+                        <MudButtonGroup Color="Color.Primary" Variant="Variant.Filled">
+                            @if (!Stardust.Program.GlobalScanPending)
+                            {
+                                @* Start GLOBAL SCAN Button*@
+                                <MudButton StartIcon="@Icons.Material.Filled.PlayArrow" Color="Color.Primary" Variant="Variant.Filled" OnClick="@(() => StartGlobalScan())">Start Global Scan</MudButton>
+                                <MudButton StartIcon="@_taskButtonIcon" OnClick="@(() => OnToggledChanged())" Color="@_taskButtonColor"> @_taskText</MudButton>
+                            }
+                            else
+                            {
+                                @* Stop GLOBAL SCAN Button*@
+                                <MudButton StartIcon="@Icons.Material.Filled.Stop" Color="Color.Secondary" Variant="Variant.Filled" OnClick="@(() => StopGlobalScan())">Stop Global Scan</MudButton>
+                            }
+                        </MudButtonGroup>
+                    </MudGrid>
+                </MudItem>
+            </MudGrid>
+        </MudContainer>
+    }
+    else
+    {
+        <MudContainer Class="mt-5 px-8" MaxWidth="MaxWidth.False">
+            <MudAlert Severity="Severity.Error" Elevation="4">
+                You are not allowed to access this page.
+                If you think this is a mistake, please contact an administrator.
+            </MudAlert>
+        </MudContainer>
+    }
+</AuthorizeView>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+    public StardustUser stardustUser { get; set; } = new StardustUser();
+    List<StardustUser> stardustUsers { get; set; }
+    public bool _generateTasks = false;
+    public int Value { get; set; }
+    string _taskText = "Don't generate Tasks";
+    int _count = 0;
+    int _countTotal = 0;
+    List<ManagedDevice?> ManagedDevices = new();
+    List<ManagedDevice?> ScannableDevices = new();
+    DevicesService DevicesService = new();
+    List<DetectedDevice> DetectedDevices = new();
+    List<GlobalScan>? globalScans = new();
+    GlobalScan? LastScan = new();
+    MudBlazor.Color _taskButtonColor = Color.Error;
+    string _taskButtonIcon = MudBlazor.Icons.Material.Filled.Cancel;
+
+    public void OnToggledChanged()
+    {
+        _generateTasks = !_generateTasks;
+        _taskText = _generateTasks ? "Generate Tasks" : "Don't generate Tasks";
+        _taskButtonColor = _generateTasks ? Color.Success : Color.Error;
+        _taskButtonIcon = _generateTasks ? MudBlazor.Icons.Material.Filled.Check : MudBlazor.Icons.Material.Filled.Cancel;
+    }
+
+    private void GoHome()
+    {
+        NavigationManager.NavigateTo("/");
+    }
+
+    private async void StartGlobalScan()
+    {
+        GlobalScanService.StartBackgroundTask(stardustUser?.GraphUserId, _generateTasks);
+        while (Stardust.Program.GlobalScanPending)
+            await Task.Delay(250);
+        StateHasChanged();
+    }
+
+    private async void StopGlobalScan()
+    {
+        GlobalScanService.StopBackgroundTask();
+        while (Stardust.Program.GlobalScanPending)
+            await Task.Delay(250);
+        StateHasChanged();
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthenticationStateTask == null)
+            return;
+        var authState = await AuthenticationStateTask;
+
+        if (authState?.User?.Identity?.IsAuthenticated != null && authState.User.Identity.IsAuthenticated)
+        {
+            try
+            {
+                var user = await GraphClient.Me.GetAsync();
+                if (user == null)
+                    return;
+                stardustUsers = await StardustCRUD.GetUsersAsync();
+                foreach (StardustUser stardustUserItem in stardustUsers)
+                {
+                    if (stardustUserItem?.Name?.ToLower() == user?.DisplayName?.ToLower())
+                    {
+                        stardustUser = stardustUserItem;
+                        StateHasChanged();
+                    }
+                }
+            }
+            catch
+            {
+                return;
+            }
+        }
+
+        globalScans = await StardustCRUD.GetAllGlobalScansAsync();
+        LastScan = await StardustCRUD.GetNewestLastScanAsync();
+        StateHasChanged();
+
+        if (!Stardust.Program.GlobalScanPending)
+        {
+            GraphWrapper graphWrapper = new(GraphClient);
+            ManagedDevices = await graphWrapper.GetAllManagedDevices();
+            await DevicesService.RunNmapScanLocalNetworkAsync();
+            List<string> text = DevicesService.GetResultLines();
+            XmlDocument? ScanReport = new();
+            ScanReport.LoadXml(string.Join(string.Empty, text));
+            ParseScan(ScanReport);
+
+            foreach (ManagedDevice? managedDevice in ManagedDevices)
+            {
+                if (managedDevice == null)
+                    continue;
+                foreach (DetectedDevice? detectedDevice in DetectedDevices)
+                {
+                    if (detectedDevice == null)
+                        continue;
+                    if (detectedDevice.MACAddress == managedDevice.WiFiMacAddress || detectedDevice.MACAddress == managedDevice.EthernetMacAddress)
+                    {
+                        managedDevice.AdditionalData["OnLocalNetwork"] = true;
+                        managedDevice.AdditionalData["LocalIP"] = detectedDevice.LocalIP;
+                        break;
+                    }
+                }
+            }
+            foreach (ManagedDevice? managedDevice in ManagedDevices)
+            {
+                if (managedDevice == null)
+                    continue;
+                if (managedDevice.AdditionalData.ContainsKey("OnLocalNetwork") && (bool)(managedDevice.AdditionalData["OnLocalNetwork"]) == true)
+                    ScannableDevices.Add(managedDevice);
+            }
+
+            StateHasChanged();
+        }
+        _ = Task.Run(() => UpdateDatas());
+    }
+
+
+    private async Task UpdateDatas()
+    {
+        while (true)
+        {
+            while (!Stardust.Program.GlobalScanPending)
+                await Task.Delay(250);
+            while (Stardust.Program.GlobalScanPending)
+            {
+                await InvokeAsync(async () =>
+                {
+                    globalScans = await StardustCRUD.GetAllGlobalScansAsync();
+                    LastScan = await StardustCRUD.GetNewestLastScanAsync();
+                    _count = GlobalScanService._counter;
+                    _countTotal = GlobalScanService.ScannableDevices.Count();
+                    Value = Convert.ToInt32((double)((double)_count / (double)_countTotal) * 100);
+                    StateHasChanged();
+                });
+                await Task.Delay(1000);
+            }
+        }
+    }
+
+    private void ParseScan(XmlDocument? ScanReport)
+    {
+        if (ScanReport == null)
+            return;
+        if (DetectedDevices != null)
+            DetectedDevices.Clear();
+        else
+            DetectedDevices = new();
+        XmlNodeList HostsNodeList = ScanReport.GetElementsByTagName("host");
+
+        foreach (XmlNode hostNode in HostsNodeList)
+        {
+            var ipNode = hostNode.SelectSingleNode("address");
+            var macNode = ipNode?.NextSibling;
+            var hostnameNode = hostNode.SelectSingleNode("hostnames/hostname")?.Attributes?["name"];
+
+            var detectedDevice = new DetectedDevice
+                {
+                    LocalIP = ipNode?.Attributes?["addr"]?.Value,
+                    MACAddress = macNode?.Attributes?["addr"]?.Value,
+                    Vendor = macNode?.Attributes?["vendor"]?.Value,
+                    Hostname = hostnameNode?.Value ?? "N/A"
+                };
+            if (detectedDevice.MACAddress != null)
+                detectedDevice.MACAddress = detectedDevice.MACAddress.ToUpper();
+            else
+                continue;
+            if (detectedDevice.Hostname != "host.docker.internal")
+                DetectedDevices.Add(detectedDevice);
+        }
+    }
+
+    // protected override async Task OnAfterRenderAsync(bool firstrender)
+    // {
+    //     if (firstrender)
+    //     {
+    //         if (ManagedDevices != null)
+    //             return;
+            
+    //     }
+    // }
+}
