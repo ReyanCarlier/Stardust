@@ -1,6 +1,8 @@
 # Stardust
 ### Monitor managed and unmanaged devices on your network, with Nmap, Microsoft Graph, in an Azure AD environment.
 
+# I hereby disclaim any liability for misuse of Stardust. For educational use only. (See Warnings)
+
 Implementation as part of a 6-month cybersecurity internship, 2 months of this internship were dedicated to Stardust development in solo.
 Stardust is written in C#/ASP.NET & Blazor Server, and is accessible only if you have a Microsoft Azure account with sufficient authorizations.
 This repository has been curated of every confidential informations, thus, it might need you to do some configurations to make it work.
@@ -9,7 +11,7 @@ An additionnal database made with SQLite is also used by Stardust to store devic
 An empty database is also provided and distributed here.
 
 ## Warnings
-- Make sure you are the owner of the network where you use Stardust or to have the explicit autorization of the owner to scan the network you're on.
+- Make sure you are the owner of the network where you use Stardust or to have the explicit autorization of the owner to scan the network you're on. I 
 - Stardust is functional but some implementations of Microsoft Defender were removed due to license reasons.
 - `Atlassian.Jira.dll` library included in this project is a slightly modified version of [Atlassian.Net-SDK](https://github.com/kalhorim/Atlassian.Net-SDK) and keep its own license. (See `Dependencies/Atlassian.Jira.dll.LICENSE.md`)
 
